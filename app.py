@@ -3,180 +3,119 @@ import pandas as pd
 from datetime import datetime
 import gspread
 from google.oauth2.service_account import Credentials
+import json
+import os
 
-# --- 初期設定 ---
-# 1. 認証設定
-scopes = [
-    'https://www.googleapis.com/auth/spreadsheets',
-    'https://www.googleapis.com/auth/drive'
-]
+# --- 認証設定（ここがエラーの原因でした） ---
+scopes = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
 
-# secret.jsonを読み込む
-try:
+# 1. 優先的にネット上の「合鍵（Secrets）」を確認する
+if "GCP_SERVICE_ACCOUNT" in st.secrets:
+    secret_data = st.secrets["GCP_SERVICE_ACCOUNT"]
+    # 辞書形式か文字列かを確認して読み込む
+    if isinstance(secret_data, str):
+        service_account_info = json.loads(secret_data)
+    else:
+        service_account_info = dict(secret_data)
+    credentials = Credentials.from_service_account_info(service_account_info, scopes=scopes)
+
+# 2. もしネット上になければ、仕方なくMac内のファイルを探す（予備）
+elif os.path.exists('secret.json'):
     credentials = Credentials.from_service_account_file('secret.json', scopes=scopes)
-    gc = gspread.authorize(credentials)
-except FileNotFoundError:
-    st.error("エラー: 'secret.json' が見つかりません。ファイル名と保存場所を確認してください。")
+
+# 3. どちらにもなければ、わかりやすいエラーを出す
+else:
+    st.error("【設定エラー】合鍵が見つかりません。Streamlit Cloudの Settings > Secrets に正しく貼り付けられているか確認してください。")
     st.stop()
 
-# 2. スプレッドシートのURL（★ここを自分のURLに書き換えてください！）
-SPREADSHEET_URL = "https://docs.google.com/spreadsheets/d/1C9xD5xD3ZvGEV6IPuD2_dj9f_oqAIz_v923PMRabBu4/edit?gid=0#gid=0"
+gc = gspread.authorize(credentials)
 
-# スプレッドシートを開く
+# --- スプレッドシート設定 ---
+# ★ここを自分のスプレッドシートのURLに書き換えてください！
+SPREADSHEET_URL = "ここにあなたのスプレッドシートURLを貼り付け" 
+
 try:
     workbook = gc.open_by_url(SPREADSHEET_URL)
     worksheet_main = workbook.worksheet("メイン")
     worksheet_backup = workbook.worksheet("バックアップ")
 except Exception as e:
-    st.error(f"エラー: スプレッドシートの読み込みに失敗しました。URLやシート名（メイン・バックアップ）を確認してください。詳細: {e}")
+    st.error(f"スプレッドシートへの接続に失敗しました。URLが正しいか確認してください: {e}")
     st.stop()
 
-# --- データ読み書き関数 ---
+# --- 以降、データ処理 ---
 def load_data(sheet):
     data = sheet.get_all_records()
-    if data:
-        df = pd.DataFrame(data)
-        df['日付'] = pd.to_datetime(df['日付'])
-        return df
-    else:
-        return pd.DataFrame(columns=['日付', '名前', '学年', '入室時間', '退室時間', '利用時間（時間）'])
+    return pd.DataFrame(data) if data else pd.DataFrame(columns=['日付', '名前', '学年', '入室時間', '退室時間', '利用時間（時間）'])
 
 def save_data(sheet, df):
     sheet.clear()
     if not df.empty:
         save_df = df.copy()
-        save_df['日付'] = pd.to_datetime(save_df['日付']).dt.strftime('%Y-%m-%d')
-        save_df = save_df.fillna("") # 空欄を安全に処理
+        if '日付' in save_df.columns:
+            save_df['日付'] = pd.to_datetime(save_df['日付']).dt.strftime('%Y-%m-%d')
         data_to_upload = [save_df.columns.tolist()] + save_df.values.tolist()
         sheet.update(range_name="A1", values=data_to_upload)
     else:
-        headers = [['日付', '名前', '学年', '入室時間', '退室時間', '利用時間（時間）']]
-        sheet.update(range_name="A1", values=headers)
+        sheet.update(range_name="A1", values=[['日付', '名前', '学年', '入室時間', '退室時間', '利用時間（時間）']])
 
 st.title("自習室 利用時間記録＆ランキング")
-
-# --- サイドバー（データ管理） ---
-st.sidebar.header("⚙️ データ管理")
-st.sidebar.write("※管理用メニューです")
-
-if st.sidebar.button("⚠️ データをリセットする"):
-    main_df = load_data(worksheet_main)
-    if not main_df.empty:
-        save_data(worksheet_backup, main_df) # バックアップに保存
-        empty_df = pd.DataFrame(columns=['日付', '名前', '学年', '入室時間', '退室時間', '利用時間（時間）'])
-        save_data(worksheet_main, empty_df) # メインを空にする
-        st.sidebar.success("データをリセットし、バックアップを作成しました。")
-        st.rerun()
-    else:
-        st.sidebar.warning("リセットするデータがありません。")
-
-if st.sidebar.button("🔄 直前のデータを復元する"):
-    backup_df = load_data(worksheet_backup)
-    if not backup_df.empty:
-        save_data(worksheet_main, backup_df) # メインに上書き
-        st.sidebar.success("データを復元しました。")
-        st.rerun()
-    else:
-        st.sidebar.error("復元できるバックアップデータがありません。")
-
-st.sidebar.divider()
-
-# --- メイン画面 ---
 df = load_data(worksheet_main)
+if not df.empty and '日付' in df.columns:
+    df['日付'] = pd.to_datetime(df['日付'])
 
-# --- 記録入力セクション ---
+# 記録入力
 st.header("📝 記録の入力")
 with st.form("record_form"):
     col1, col2 = st.columns(2)
     with col1:
-        date = st.date_input("日付")
+        date = st.date_input("日付", datetime.now())
         name = st.text_input("名前")
-        grade = st.selectbox("学年", ["小1", "小2", "小3", "小4", "小5", "小6", "中1", "中2", "中3", "高1", "高2", "高3", "既卒/その他"])
+        grades = [f"小{i}" for i in range(1, 7)] + [f"中{i}" for i in range(1, 4)] + [f"高{i}" for i in range(1, 4)] + ["しんうら", "既卒/その他"]
+        grade = st.selectbox("学年", grades)
     with col2:
-        start_time = st.time_input("入室時間")
-        end_time = st.time_input("退室時間")
+        start_time = st.time_input("入室時間", datetime.strptime("17:00", "%H:%M"))
+        end_time = st.time_input("退室時間", datetime.strptime("21:00", "%H:%M"))
     
-    submitted = st.form_submit_button("記録を追加")
-
-    if submitted:
-        if name == "":
-            st.error("名前を入力してください。")
-        else:
+    if st.form_submit_button("記録を追加"):
+        if name:
             start_dt = datetime.combine(date, start_time)
             end_dt = datetime.combine(date, end_time)
-            
             if end_dt < start_dt:
                 end_dt = datetime.combine(date + pd.Timedelta(days=1), end_time)
-                
-            duration = (end_dt - start_dt).total_seconds() / 3600
+            duration = round((end_dt - start_dt).total_seconds() / 3600, 2)
 
-            new_record = pd.DataFrame([{
-                '日付': pd.to_datetime(date),
-                '名前': name,
-                '学年': grade,
-                '入室時間': start_time.strftime('%H:%M'),
-                '退室時間': end_time.strftime('%H:%M'),
-                '利用時間（時間）': round(duration, 2)
-            }])
-            
+            new_record = pd.DataFrame([{'日付': pd.to_datetime(date), '名前': name, '学年': grade, '入室時間': start_time.strftime('%H:%M'), '退室時間': end_time.strftime('%H:%M'), '利用時間（時間）': duration}])
             df = pd.concat([df, new_record], ignore_index=True)
             save_data(worksheet_main, df)
-            st.success(f"{name}さん（{grade}）の記録を追加しました。")
+            st.success(f"{name}さんの記録を追加しました！")
             st.rerun()
+        else:
+            st.error("名前を入れてください")
 
-# --- ランキング表示セクション ---
-st.header("🏆 利用時間ランキング")
-
+# ランキング表示
+st.header("🏆 ランキング")
 if not df.empty:
-    def create_ranking_table(target_df):
-        if target_df.empty:
-            return None
-        ranking_df = target_df.groupby(['名前', '学年'])['利用時間（時間）'].sum().reset_index()
-        ranking_df = ranking_df.sort_values(by='利用時間（時間）', ascending=False).reset_index(drop=True)
-        ranking_df.index = ranking_df.index + 1
-        ranking_df.index.name = '順位'
-        return ranking_df
-
-    tab1, tab2, tab3 = st.tabs(["1ヶ月(月別)", "直近3ヶ月", "累計(全期間)"])
-
-    with tab1:
-        df['年月'] = df['日付'].dt.strftime('%Y-%m')
-        months = df['年月'].unique().tolist()
-        months.sort(reverse=True)
-        selected_month = st.selectbox("集計月を選択してください", months)
-        
-        monthly_df = df[df['年月'] == selected_month]
-        ranking_1m = create_ranking_table(monthly_df)
-        
-        if ranking_1m is not None:
-            st.dataframe(ranking_1m, width='stretch')
+    def show_rank(target_df):
+        if not target_df.empty:
+            ranking = target_df.groupby(['名前', '学年'])['利用時間（時間）'].sum().reset_index()
+            ranking = ranking.sort_values(by='利用時間（時間）', ascending=False).reset_index(drop=True)
+            ranking.index += 1
+            st.dataframe(ranking, use_container_width=True)
         else:
-            st.write("選択された月の記録はありません。")
+            st.write("データがありません")
 
-    with tab2:
-        today = pd.Timestamp.today().normalize()
-        three_months_ago = today - pd.Timedelta(days=90)
-        recent_3m_df = df[df['日付'] >= three_months_ago]
-        
-        st.write(f"集計期間: {three_months_ago.strftime('%Y-%m-%d')} 〜 今日")
-        ranking_3m = create_ranking_table(recent_3m_df)
-        
-        if ranking_3m is not None:
-            st.dataframe(ranking_3m, width='stretch')
-        else:
-            st.write("直近3ヶ月の記録はありません。")
-
-    with tab3:
-        st.write("記録開始からの全期間の合計です。")
-        ranking_all = create_ranking_table(df)
-        st.dataframe(ranking_all, width='stretch')
-
-    st.subheader("すべての記録履歴")
-    display_df = df.copy()
-    display_df['日付'] = display_df['日付'].dt.strftime('%Y-%m-%d')
-    if '年月' in display_df.columns:
-        display_df = display_df.drop(columns=['年月'])
-    st.dataframe(display_df, width='stretch')
-
+    t1, t2 = st.tabs(["今月", "全期間"])
+    with t1:
+        this_month = datetime.now().strftime('%Y-%m')
+        show_rank(df[df['日付'].dt.strftime('%Y-%m') == this_month] if not df.empty else df)
+    with t2:
+        show_rank(df)
 else:
-    st.write("まだ記録がありません。")
+    st.info("まだ記録がありません。")
+
+# 管理
+st.sidebar.header("管理メニュー")
+if st.sidebar.button("データをリセット"):
+    save_data(worksheet_backup, df)
+    save_data(worksheet_main, pd.DataFrame(columns=['日付', '名前', '学年', '入室時間', '退室時間', '利用時間（時間）']))
+    st.rerun()
