@@ -77,7 +77,7 @@ with st.sidebar:
     st.title("Admin Menu")
     
     # 記録入力
-    st.markdown("### ✍️ 利用記録の登録")
+    st.markdown("### ✍️ 学習記録の登録")
     with st.form("record_form", clear_on_submit=True):
         f_date = st.date_input("日付", datetime.now())
         f_name = st.text_input("名前")
@@ -121,11 +121,11 @@ with st.sidebar:
             st.rerun()
 
 # --- 4. メイン画面 ---
-st.title("🏆 自習室利用ランキング")
+st.title("🏆 自習室　利用時間ランキング")
 df = load_data()
 
 if not df.empty:
-    tab1, tab2, tab3 = st.tabs(["🗓 今月", "🔥 直近3ヶ月", "👑 殿堂入り"])
+    tab1, tab2, tab3 = st.tabs(["🗓 今月", "🔥 直近3ヶ月", "累計"])
     
     def display_leaderboard(target_df):
         if target_df.empty:
