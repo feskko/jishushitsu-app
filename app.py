@@ -7,7 +7,8 @@ import json
 import os
 
 # --- ページ設定（ブラウザのタブ名や幅の設定） ---
-st.set_page_config(page_title="自習室ランキング", page_icon="🏆", layout="wide")
+# 変更後（画像ファイル名に！）
+st.set_page_config(page_title="自習室ランキング", page_icon="icon.png", layout="wide")
 
 # --- カスタムCSS（デザインの微調整） ---
 st.markdown("""
