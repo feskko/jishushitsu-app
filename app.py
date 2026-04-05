@@ -7,6 +7,9 @@ import json
 import os
 import re
 
+# 日本時間の「今」を取得（海外サーバーでの時間ズレ対策）
+jst_now = datetime.utcnow() + timedelta(hours=9)
+
 # --- 1. ページ構成（TKGブルーホライズン・コンセプト） ---
 st.set_page_config(page_title="TKG Study Room Analytics", page_icon="icon.png", layout="wide")
 
@@ -174,9 +177,9 @@ with st.sidebar:
     
     st.markdown("<h2 style='color:white; margin-bottom: 20px;'>[TKG]新浦安教室</h2>", unsafe_allow_html=True)
     
-    f_date = st.date_input("利用日", datetime.now())
+    # デフォルトの利用日を日本時間の「今日」に設定
+    f_date = st.date_input("利用日", jst_now.date())
     
-    # 登録ごとにキーを切り替えてフォームをリセットする設計
     k_name = f"name_{st.session_state.form_key}"
     k_in = f"in_time_{st.session_state.form_key}"
     k_out = f"out_time_{st.session_state.form_key}"
@@ -213,7 +216,6 @@ with st.sidebar:
             df = pd.concat([df, new_row], ignore_index=True)
             save_to_gs(df)
             
-            # エラー回避: 状態の直接書き換えではなく、ウィジェットのIDを更新して白紙にする
             st.session_state.form_key += 1 
             st.success(f"✓ {f_name}さんの記録を保存しました。")
             st.cache_data.clear()
@@ -245,13 +247,12 @@ with st.sidebar:
             else:
                 st.warning("記録を選択してください。")
     
-    st.markdown("<div style='text-align: center; font-size: 0.75rem; color: #94A3B8; margin-top: 40px;'>Tokyo Kobetsu Shido Gakuin<br>Study Room System v3.2</div>", unsafe_allow_html=True)
+    st.markdown("<div style='text-align: center; font-size: 0.75rem; color: #94A3B8; margin-top: 40px;'>Tokyo Kobetsu Shido Gakuin<br>Study Room System v3.3</div>", unsafe_allow_html=True)
 
 # --- 5. メインパネル（部門別ランキング） ---
 st.markdown("<div class='main-title'>STUDY HOURS RANKING</div>", unsafe_allow_html=True)
 df = load_data()
 
-# 究極の高級感：トップ3カード
 def render_premium_cards(agg):
     if agg.empty: return
     html = '<div style="display: flex; gap: 20px; margin-bottom: 20px; flex-wrap: wrap;">'
@@ -265,7 +266,6 @@ def render_premium_cards(agg):
         grade = agg.iloc[i]['学年']
         time_val = agg.iloc[i]['利用時間（時間）']
         
-        # HTMLを1行にまとめることでStreamlitのMarkdown誤作動を防止
         html += f"<div style='flex: 1; min-width: 250px; background: {bg_grad}; padding: 25px; border-radius: 16px; box-shadow: 0 10px 15px -3px rgba(10, 43, 86, 0.08); border: 1px solid #E2E8F0; border-top: 5px solid {border_color};'>"
         html += f"<div style='display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;'><span style='font-size: 1rem; color: #64748B; font-weight: 800; letter-spacing: 1px;'>{rank_text} PLACE</span><span style='font-size: 1.5rem;'>{icon}</span></div>"
         html += f"<div style='font-size: 0.9rem; color: #0A2B56; font-weight: bold; margin-bottom: 5px;'>{grade}</div>"
@@ -276,7 +276,6 @@ def render_premium_cards(agg):
     html += '</div>'
     st.markdown(html, unsafe_allow_html=True)
 
-# 部門別にランキングを描画
 def render_section_ranking(full_agg, target_grades, section_title):
     section_df = full_agg[full_agg['学年'].isin(target_grades)].reset_index(drop=True)
     st.markdown(f"<div class='section-title'>{section_title}</div>", unsafe_allow_html=True)
@@ -305,20 +304,23 @@ if not df.empty:
         agg = target_df.groupby(['名前', '学年'])['利用時間（時間）'].sum().reset_index()
         return agg.sort_values(by='利用時間（時間）', ascending=False).reset_index(drop=True)
 
-    # --- 日付計算（正確な期間絞り込み） ---
-    today = pd.Timestamp.today().normalize()
+    # --- 日付計算（未来データを完全にブロック） ---
+    jst_today = pd.Timestamp(jst_now.date())
     
-    # 【今月】年と月が一致するデータのみ抽出
-    df_month = df[(df['日付'].dt.year == today.year) & (df['日付'].dt.month == today.month)]
+    # 未来の日付を足切りする（今日以前のデータのみを対象とする）
+    df_valid_past = df[df['日付'] <= jst_today]
+    
+    # 【今月】
+    df_month = df_valid_past[(df_valid_past['日付'].dt.year == jst_today.year) & (df_valid_past['日付'].dt.month == jst_today.month)]
     agg_month = get_agg_data(df_month)
     
-    # 【直近3ヶ月】今日からちょうど3ヶ月（約90日）前以降のデータを抽出
-    three_months_ago = today - pd.DateOffset(months=3)
-    df_3months = df[df['日付'] >= three_months_ago]
+    # 【直近3ヶ月】
+    three_months_ago = jst_today - pd.DateOffset(months=3)
+    df_3months = df_valid_past[df_valid_past['日付'] >= three_months_ago]
     agg_3months = get_agg_data(df_3months)
     
-    # 【累計】全期間
-    agg_all = get_agg_data(df)
+    # 【累計】未来のデータも除外した正しい全期間
+    agg_all = get_agg_data(df_valid_past)
 
     # --- 各タブの描画 ---
     for tab, agg_data in zip([tab1, tab2, tab3], [agg_month, agg_3months, agg_all]):
