@@ -75,9 +75,9 @@ st.markdown("""
     @media (min-width: 768px) {
         .main-title { font-size: 2.4rem; }
         .section-title { font-size: 1.6rem; }
-        div[role="radiogroup"] { max-width: 500px; }
+        div[role="radiogroup"] { max-width: 500px; } /* PCではメニュー幅を制限 */
         .rank-card { 
-            flex: 1; min-width: 30%; 
+            flex: 1; min-width: 30%; /* PCでは横に3つ並べる */
             padding: 25px; border-radius: 16px; 
             box-shadow: 0 10px 15px -3px rgba(10, 43, 86, 0.08); 
             border: 1px solid #E2E8F0;
@@ -90,14 +90,14 @@ st.markdown("""
     @media (max-width: 767px) {
         .main-title { font-size: 1.8rem; }
         .section-title { font-size: 1.3rem; }
-        div[role="radiogroup"] { width: 100%; }
+        div[role="radiogroup"] { width: 100%; } /* スマホではメニューを全幅に */
         .rank-card { 
-            width: 100%; 
+            width: 100%; /* スマホでは縦に並べる（1行に1つ） */
             padding: 20px; border-radius: 12px; 
             box-shadow: 0 6px 10px -3px rgba(10, 43, 86, 0.08); 
             border: 1px solid #E2E8F0; margin-bottom: 15px;
         }
-        .stButton>button { height: 4rem; font-size: 1.2rem; margin-top: 10px; }
+        .stButton>button { height: 4rem; font-size: 1.2rem; margin-top: 10px; } /* スマホはボタンを大きく */
         div[data-baseweb="input"] > div, div[data-baseweb="select"] > div { height: 3.5rem; }
     }
 </style>
@@ -170,6 +170,7 @@ if menu == "📝 記録する":
     k_in = f"in_time_{st.session_state.form_key}"
     k_out = f"out_time_{st.session_state.form_key}"
     
+    # PCとスマホで自動的にレイアウトが変わるコンテナ
     col1, col2 = st.columns([1, 1])
     with col1:
         f_name = st.text_input("氏名", placeholder="山田太郎（スペース不要）", key=k_name)
@@ -330,4 +331,4 @@ elif menu == "⚙️ 管理":
     else:
         st.info("削除できるデータがありません。")
 
-st.markdown("<div style='text-align: center; font-size: 0.75rem; color: #94A3B8; margin-top: 60px;'>Tokyo Kobetsu Shido Gakuin<br>Responsive System v4.2</div>", unsafe_allow_html=True)
+st.markdown("<div style='text-align: center; font-size: 0.75rem; color: #94A3B8; margin-top: 60px;'>Tokyo Kobetsu Shido Gakuin<br>Responsive System v4.1</div>", unsafe_allow_html=True)
