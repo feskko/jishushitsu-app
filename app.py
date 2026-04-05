@@ -185,7 +185,7 @@ def parse_final_time(t_str):
 with st.sidebar:
     if os.path.exists("icon.png"): st.image("icon.png", width=70)
     
-    st.markdown("<h2 style='color:white; margin-bottom: 20px;'>TKG RECORD PANEL</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='color:white; margin-bottom: 20px;'>[TKG]新浦安</h2>", unsafe_allow_html=True)
     
     f_date = st.date_input("利用日", datetime.now())
     f_name = st.text_input("氏名", placeholder="山田 太郎")
