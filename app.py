@@ -113,19 +113,6 @@ st.markdown("""
         background-color: #0A2B56 !important;
         color: #FFFFFF !important;
     }
-
-    /* ========== 印刷用（白黒・インク節約・美しい表） ========== */
-    @media print {
-        @page { margin: 10mm; size: A4 portrait; }
-        header, footer, [data-testid="stSidebar"], div.stButton, .stTabs [data-baseweb="tab-list"], [data-testid="stExpander"] { display: none !important; }
-        .stApp { background-color: #FFFFFF !important; }
-        .print-area { display: block !important; }
-        .section-title { color: #000000 !important; border-left: none; border-bottom: 2px solid #000000; padding-left: 0; }
-        * { box-shadow: none !important; border-radius: 0 !important; background: transparent !important; color: #000 !important; }
-        table { border-collapse: collapse; width: 100%; }
-        th, td { border: 1px solid #000 !important; padding: 8px; }
-        th { background-color: #EEEEEE !important; -webkit-print-color-adjust: exact; }
-    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -258,7 +245,7 @@ with st.sidebar:
             else:
                 st.warning("記録を選択してください。")
     
-    st.markdown("<div style='text-align: center; font-size: 0.75rem; color: #94A3B8; margin-top: 40px;'>Tokyo Kobetsu Shido Gakuin<br>Study Room System v3.1</div>", unsafe_allow_html=True)
+    st.markdown("<div style='text-align: center; font-size: 0.75rem; color: #94A3B8; margin-top: 40px;'>Tokyo Kobetsu Shido Gakuin<br>Study Room System v3.2</div>", unsafe_allow_html=True)
 
 # --- 5. メインパネル（部門別ランキング） ---
 st.markdown("<div class='main-title'>STUDY HOURS RANKING</div>", unsafe_allow_html=True)
@@ -278,7 +265,7 @@ def render_premium_cards(agg):
         grade = agg.iloc[i]['学年']
         time_val = agg.iloc[i]['利用時間（時間）']
         
-        # HTMLを1行にまとめることでStreamlitのMarkdown誤作動を防止します
+        # HTMLを1行にまとめることでStreamlitのMarkdown誤作動を防止
         html += f"<div style='flex: 1; min-width: 250px; background: {bg_grad}; padding: 25px; border-radius: 16px; box-shadow: 0 10px 15px -3px rgba(10, 43, 86, 0.08); border: 1px solid #E2E8F0; border-top: 5px solid {border_color};'>"
         html += f"<div style='display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;'><span style='font-size: 1rem; color: #64748B; font-weight: 800; letter-spacing: 1px;'>{rank_text} PLACE</span><span style='font-size: 1.5rem;'>{icon}</span></div>"
         html += f"<div style='font-size: 0.9rem; color: #0A2B56; font-weight: bold; margin-bottom: 5px;'>{grade}</div>"
@@ -306,21 +293,8 @@ def render_section_ranking(full_agg, target_grades, section_title):
         "利用時間（時間）": st.column_config.ProgressColumn("累計学習時間", format="%.2f h", min_value=0, max_value=float(section_df['利用時間（時間）'].max()))
     })
 
-# 印刷用テーブル描画
-def render_printable_table(full_agg, target_grades, title):
-    section_df = full_agg[full_agg['学年'].isin(target_grades)].reset_index(drop=True)
-    if section_df.empty: return
-    
-    print_html = f"<h3 style='color: black; margin-top: 30px; border-bottom: 2px solid #000; padding-bottom: 5px; font-size: 18px;'>{title}</h3>"
-    print_html += "<table style='width: 100%; border-collapse: collapse; font-family: sans-serif; color: black; margin-bottom: 20px; font-size: 14px;'>"
-    print_html += "<tr><th style='border: 1px solid #000; padding: 8px; text-align: center; width: 12%;'>順位</th><th style='border: 1px solid #000; padding: 8px; width: 48%;'>氏名</th><th style='border: 1px solid #000; padding: 8px; text-align: center; width: 15%;'>学年</th><th style='border: 1px solid #000; padding: 8px; text-align: right; width: 25%;'>学習時間</th></tr>"
-    for i, row in section_df.iterrows():
-        print_html += f"<tr><td style='border: 1px solid #000; padding: 6px; text-align: center;'>{i+1}</td><td style='border: 1px solid #000; padding: 6px; font-weight: bold;'>{row['名前']}</td><td style='border: 1px solid #000; padding: 6px; text-align: center;'>{row['学年']}</td><td style='border: 1px solid #000; padding: 6px; text-align: right;'>{row['利用時間（時間）']:.2f} h</td></tr>"
-    print_html += "</table>"
-    st.markdown(print_html, unsafe_allow_html=True)
-
 if not df.empty:
-    tab1, tab2, tab3, tab4 = st.tabs(["🗓 今月の集計", "🔥 直近3ヶ月", "👑 累計", "🖨️ 印刷"])
+    tab1, tab2, tab3 = st.tabs(["🗓 今月の集計", "🔥 直近3ヶ月", "👑 累計"])
     
     elem_grades = [f"小{i}" for i in range(1, 7)]
     jh_grades = [f"中{i}" for i in range(1, 4)]
@@ -331,33 +305,30 @@ if not df.empty:
         agg = target_df.groupby(['名前', '学年'])['利用時間（時間）'].sum().reset_index()
         return agg.sort_values(by='利用時間（時間）', ascending=False).reset_index(drop=True)
 
-    agg_month = get_agg_data(df[df['日付'].dt.month == datetime.now().month])
-    agg_3months = get_agg_data(df[df['日付'] >= (datetime.now() - timedelta(days=90))])
+    # --- 日付計算（正確な期間絞り込み） ---
+    today = pd.Timestamp.today().normalize()
+    
+    # 【今月】年と月が一致するデータのみ抽出
+    df_month = df[(df['日付'].dt.year == today.year) & (df['日付'].dt.month == today.month)]
+    agg_month = get_agg_data(df_month)
+    
+    # 【直近3ヶ月】今日からちょうど3ヶ月（約90日）前以降のデータを抽出
+    three_months_ago = today - pd.DateOffset(months=3)
+    df_3months = df[df['日付'] >= three_months_ago]
+    agg_3months = get_agg_data(df_3months)
+    
+    # 【累計】全期間
     agg_all = get_agg_data(df)
 
+    # --- 各タブの描画 ---
     for tab, agg_data in zip([tab1, tab2, tab3], [agg_month, agg_3months, agg_all]):
         with tab:
-            if agg_data.empty: st.info("データがありません。")
+            if agg_data.empty: 
+                st.info("データがありません。")
             else:
                 render_section_ranking(agg_data, elem_grades, "小学生の部")
                 render_section_ranking(agg_data, jh_grades, "中学生の部")
                 render_section_ranking(agg_data, hs_grades, "高校生・その他")
 
-    with tab4:
-        st.info("ブラウザの印刷機能（Ctrl+P / Cmd+P）を使用してください。")
-        st.markdown("<div class='print-area'>", unsafe_allow_html=True)
-        
-        st.markdown("<h2 style='text-align: center; margin-bottom: 0;'>🏆 学習時間ランキング（今月）</h2>", unsafe_allow_html=True)
-        render_printable_table(agg_month, elem_grades, "🎒 小学生の部")
-        render_printable_table(agg_month, jh_grades, "📓 中学生の部")
-        render_printable_table(agg_month, hs_grades, "🎓 高校生・その他")
-        
-        st.markdown("<div style='page-break-before: always;'></div>", unsafe_allow_html=True)
-        
-        st.markdown("<h2 style='text-align: center; margin-bottom: 0; margin-top: 20px;'>🔥 学習時間ランキング（直近3ヶ月）</h2>", unsafe_allow_html=True)
-        render_printable_table(agg_3months, elem_grades, "🎒 小学生の部")
-        render_printable_table(agg_3months, jh_grades, "📓 中学生の部")
-        render_printable_table(agg_3months, hs_grades, "🎓 高校生・その他")
-        st.markdown("</div>", unsafe_allow_html=True)
 else:
-    st.info("データがありません。")
+    st.info("データがありません。最初の記録を登録してください。")
