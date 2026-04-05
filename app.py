@@ -74,7 +74,7 @@ def parse_quick_time(t_str):
 # --- 3. サイドバー ---
 with st.sidebar:
     if os.path.exists("icon.png"): st.image("icon.png", width=100)
-    st.title("記録画面")
+    st.title("TKG 新浦安教室")
     
     st.markdown("### ✍️ 利用記録の登録")
     with st.form("record_form", clear_on_submit=True):
@@ -128,7 +128,7 @@ with st.sidebar:
             st.rerun()
 
 # --- 4. メイン画面 ---
-st.title("🏆 [TKG] 新浦安教室]自習室　利用時間ランキング")
+st.title("🏆自習室　利用時間ランキング")
 df = load_data()
 
 if not df.empty:
