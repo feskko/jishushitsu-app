@@ -311,7 +311,7 @@ def render_printable_table(full_agg, target_grades, title):
     st.markdown(print_html, unsafe_allow_html=True)
 
 if not df.empty:
-    tab1, tab2, tab3, tab4 = st.tabs(["🗓 今月の集計", "🔥 直近3ヶ月", "👑 殿堂入り（全期間）", "🖨️ 張り出し印刷"])
+    tab1, tab2, tab3, tab4 = st.tabs(["🗓 今月の集計", "🔥 直近3ヶ月", "👑 累計", "🖨️ 印刷"])
     
     elem_grades = [f"小{i}" for i in range(1, 7)]
     jh_grades = [f"中{i}" for i in range(1, 4)]
