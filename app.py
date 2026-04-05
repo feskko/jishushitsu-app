@@ -139,7 +139,6 @@ def load_data():
         df = pd.DataFrame(workbook.worksheet("メイン").get_all_records())
         if not df.empty: 
             df['日付'] = pd.to_datetime(df['日付'])
-            # 既存データに含まれる全角・半角スペースも自動削除して表記ゆれを修正
             df['名前'] = df['名前'].astype(str).str.replace(r'[\s　]+', '', regex=True)
         return df
     except: return pd.DataFrame(columns=['日付', '名前', '学年', '入室時間', '退室時間', '利用時間（時間）'])
@@ -180,7 +179,7 @@ with st.sidebar:
     
     st.markdown("<h2 style='color:white; margin-bottom: 20px;'>[TKG]新浦安教室</h2>", unsafe_allow_html=True)
     
-    # 💡【機能追加1】 未来の日付を選べないように max_value を設定
+    # 未来の日付を選べないように制限
     f_date = st.date_input("利用日", jst_now.date(), max_value=jst_now.date())
     
     k_name = f"name_{st.session_state.form_key}"
@@ -207,27 +206,29 @@ with st.sidebar:
     if st.button("記録を登録する", use_container_width=True):
         t_start = parse_final_time(val_in)
         t_end = parse_final_time(val_out)
-        
-        # 💡【機能追加2】 入力された名前からスペースを強制削除（表記ゆれ対策）
         f_name_clean = f_name.replace(" ", "").replace("　", "")
         
         if f_name_clean and t_start and t_end:
             start_dt = datetime.combine(f_date, t_start)
             end_dt = datetime.combine(f_date, t_end)
-            if end_dt < start_dt: end_dt += timedelta(days=1)
-            duration = round((end_dt - start_dt).total_seconds() / 3600, 2)
             
-            df = load_data()
-            new_row = pd.DataFrame([{'日付': pd.to_datetime(f_date), '名前': f_name_clean, '学年': f_grade, '入室時間': val_in, '退室時間': val_out, '利用時間（時間）': duration}])
-            df = pd.concat([df, new_row], ignore_index=True)
-            save_to_gs(df)
-            
-            st.session_state.form_key += 1 
-            st.success(f"✓ {f_name_clean}さんの記録を保存しました。")
-            st.cache_data.clear()
-            st.rerun()
+            # 💡【逆転ブロック】退室時刻が開始時刻より前、または同じ場合は保存しない
+            if end_dt <= start_dt:
+                st.error("⚠️ 退室時刻は入室時刻より後の時間で入力してください")
+            else:
+                duration = round((end_dt - start_dt).total_seconds() / 3600, 2)
+                
+                df = load_data()
+                new_row = pd.DataFrame([{'日付': pd.to_datetime(f_date), '名前': f_name_clean, '学年': f_grade, '入室時間': val_in, '退室時間': val_out, '利用時間（時間）': duration}])
+                df = pd.concat([df, new_row], ignore_index=True)
+                save_to_gs(df)
+                
+                st.session_state.form_key += 1 
+                st.success(f"✓ {f_name_clean}さんの記録を保存しました。")
+                st.cache_data.clear()
+                st.rerun()
         else:
-            st.error("入力内容に誤りがあります（時刻は 1900 または 19:00）")
+            st.error("入力内容に誤りがあります（氏名と時刻 1900 等を正しく入力してください）")
 
     st.markdown("<hr style='border-color: rgba(255,255,255,0.2);'>", unsafe_allow_html=True)
     
@@ -253,7 +254,7 @@ with st.sidebar:
             else:
                 st.warning("記録を選択してください。")
     
-    st.markdown("<div style='text-align: center; font-size: 0.75rem; color: #94A3B8; margin-top: 40px;'>Tokyo Kobetsu Shido Gakuin<br>Study Room System v3.5</div>", unsafe_allow_html=True)
+    st.markdown("<div style='text-align: center; font-size: 0.75rem; color: #94A3B8; margin-top: 40px;'>Tokyo Kobetsu Shido Gakuin<br>Study Room System v3.6</div>", unsafe_allow_html=True)
 
 # --- 5. メインパネル（部門別ランキング） ---
 st.markdown("<div class='main-title'>STUDY HOURS RANKING</div>", unsafe_allow_html=True)
@@ -263,14 +264,12 @@ def render_premium_cards(agg):
     if agg.empty: return
     html = '<div style="display: flex; gap: 20px; margin-bottom: 20px; flex-wrap: wrap;">'
     
-    # 💡【機能追加3】 上位3件を抽出してカードで表示（同率1位等にも対応）
-    top_rows = agg.head(3)
+    # 同率3位が複数いた場合でも全員漏れなくカード表示させる
+    top_rows = agg[agg['順位'] <= 3]
     
     for i, row in top_rows.iterrows():
         rank_val = row['順位']
-        name = row['名前']
-        grade = row['学年']
-        time_val = row['利用時間（時間）']
+        name, grade, time_val = row['名前'], row['学年'], row['利用時間（時間）']
         
         if rank_val == 1:
             rank_text, icon, border_color, bg_grad = "1st", "🥇", "#C9B037", "linear-gradient(135deg, #FFFFFF 0%, #FFFDF0 100%)"
@@ -299,18 +298,17 @@ def render_section_ranking(full_agg, target_grades, section_title):
         st.info("集計データがありません。")
         return
     
-    # 💡【機能追加3】 同率の場合は同じ順位を割り当て（1位、1位、3位...）
+    # 同率順位の割り当て（1位、1位、3位...）
     section_df['順位'] = section_df['利用時間（時間）'].rank(method='min', ascending=False).astype(int)
     
     render_premium_cards(section_df)
     
-    # 順位カラムを先頭にして表示
     display_df = section_df[['順位', '名前', '学年', '利用時間（時間）']]
     st.dataframe(display_df, use_container_width=True, hide_index=True, column_config={
         "順位": st.column_config.NumberColumn("順位"),
         "名前": st.column_config.TextColumn("氏名"),
         "学年": st.column_config.TextColumn("学年"),
-        "利用時間（時間）": st.column_config.ProgressColumn("累計学習時間", format="%.2f h", min_value=0, max_value=float(section_df['利用時間（時間）'].max()))
+        "利用時間（時間）": st.column_config.ProgressColumn("累計学習時間", format="%.2f h", min_value=0, max_value=float(section_df['利用時間（時間）'].max() if section_df['利用時間（時間）'].max() > 0 else 1))
     })
 
 if not df.empty:
@@ -323,12 +321,9 @@ if not df.empty:
     def get_agg_data(target_df):
         if target_df.empty: return pd.DataFrame()
         agg = target_df.groupby(['名前', '学年'])['利用時間（時間）'].sum().reset_index()
-        # 降順でソートしておく
-        agg = agg.sort_values(by='利用時間（時間）', ascending=False).reset_index(drop=True)
-        return agg
+        return agg.sort_values(by='利用時間（時間）', ascending=False).reset_index(drop=True)
 
     jst_today = pd.Timestamp(jst_now.date())
-    # 未来の日付を完全に足切り
     df_valid_past = df[df['日付'] <= jst_today]
     
     # 【今月】
@@ -351,6 +346,5 @@ if not df.empty:
                 render_section_ranking(agg_data, elem_grades, "小学生の部")
                 render_section_ranking(agg_data, jh_grades, "中学生の部")
                 render_section_ranking(agg_data, hs_grades, "高校生・その他")
-
 else:
     st.info("データがありません。最初の記録を登録してください。")
