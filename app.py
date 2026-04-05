@@ -25,7 +25,7 @@ st.markdown("""
     .main-title {
         font-size: 2.4rem;
         font-weight: 900;
-        color: #0A2B56; /* TKGの深いネイビー */
+        color: #0A2B56;
         letter-spacing: 2px;
         margin-bottom: 30px;
         padding-bottom: 15px;
@@ -39,7 +39,7 @@ st.markdown("""
         bottom: -4px;
         width: 120px;
         height: 4px;
-        background: linear-gradient(90deg, #0A2B56, #005BAB); /* ブルーホライズン・グラデーション */
+        background: linear-gradient(90deg, #0A2B56, #005BAB);
     }
 
     /* ========== 部門ごとのサブタイトル ========== */
@@ -50,7 +50,7 @@ st.markdown("""
         margin-top: 2.5rem;
         margin-bottom: 1.5rem;
         padding-left: 12px;
-        border-left: 6px solid #005BAB; /* ブライトブルーのアクセント */
+        border-left: 6px solid #005BAB;
         display: flex;
         align-items: center;
         gap: 10px;
@@ -121,7 +121,6 @@ st.markdown("""
         .stApp { background-color: #FFFFFF !important; }
         .print-area { display: block !important; }
         .section-title { color: #000000 !important; border-left: none; border-bottom: 2px solid #000000; padding-left: 0; }
-        /* 影や丸みを消す */
         * { box-shadow: none !important; border-radius: 0 !important; background: transparent !important; color: #000 !important; }
         table { border-collapse: collapse; width: 100%; }
         th, td { border: 1px solid #000 !important; padding: 8px; }
@@ -184,7 +183,6 @@ def parse_final_time(t_str):
 
 # --- 4. ユーザーインターフェース（サイドバー） ---
 with st.sidebar:
-    # アイコン（塾ロゴがあれば完璧です）
     if os.path.exists("icon.png"): st.image("icon.png", width=70)
     
     st.markdown("<h2 style='color:white; margin-bottom: 20px;'>TKG RECORD PANEL</h2>", unsafe_allow_html=True)
@@ -200,7 +198,6 @@ with st.sidebar:
     with col_out:
         st.text_input("退室", placeholder="21:30", key="out_time", on_change=auto_format_times)
     
-    # スマートプレビュー
     disp_in = st.session_state.in_time if st.session_state.in_time else "--:--"
     disp_out = st.session_state.out_time if st.session_state.out_time else "--:--"
     st.markdown(f"<div style='background-color: rgba(255,255,255,0.1); padding: 8px; border-radius: 6px; color: #E2E8F0; font-size: 0.95rem; text-align: center; margin-top: -10px; margin-bottom: 20px; font-weight: bold;'>🕒 {disp_in} 〜 {disp_out}</div>", unsafe_allow_html=True)
@@ -230,7 +227,6 @@ with st.sidebar:
 
     st.markdown("<hr style='border-color: rgba(255,255,255,0.2);'>", unsafe_allow_html=True)
     
-    # --- クイック削除機能 ---
     st.markdown("#### 🗑️ 直近の記録を取り消す")
     df_for_delete = load_data()
     if not df_for_delete.empty:
@@ -253,7 +249,6 @@ with st.sidebar:
             else:
                 st.warning("記録を選択してください。")
     
-    # フッター表記
     st.markdown("<div style='text-align: center; font-size: 0.75rem; color: #94A3B8; margin-top: 40px;'>Tokyo Kobetsu Shido Gakuin<br>Study Room System v3.0</div>", unsafe_allow_html=True)
 
 # --- 5. メインパネル（部門別ランキング） ---
@@ -274,20 +269,14 @@ def render_premium_cards(agg):
         grade = agg.iloc[i]['学年']
         time_val = agg.iloc[i]['利用時間（時間）']
         
-        html += f"""
-        <div style='flex: 1; min-width: 250px; background: {bg_grad}; padding: 25px; border-radius: 16px; 
-                    box-shadow: 0 10px 15px -3px rgba(10, 43, 86, 0.08); border: 1px solid #E2E8F0; border-top: 5px solid {border_color};'>
-            <div style='display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;'>
-                <span style='font-size: 1rem; color: #64748B; font-weight: 800; letter-spacing: 1px;'>{rank_text} PLACE</span>
-                <span style='font-size: 1.5rem;'>{icon}</span>
-            </div>
-            <div style='font-size: 0.9rem; color: #0A2B56; font-weight: bold; margin-bottom: 5px;'>{grade}</div>
-            <div style='font-size: 2.2rem; font-weight: 900; color: #0F172A; margin-bottom: 15px;'>{name} <span style='font-size: 1rem; font-weight: 600; color: #64748B;'>さん</span></div>
-            <div style='display: inline-block; background-color: #F1F5F9; color: #0A2B56; padding: 6px 16px; border-radius: 8px; font-weight: 800; font-size: 1.2rem; border: 1px solid #E2E8F0;'>
-                {time_val:.2f} <span style='font-size: 0.9rem;'>HOURS</span>
-            </div>
-        </div>
-        """
+        # HTMLを1行にまとめることでStreamlitのMarkdown誤作動を防止します
+        html += f"<div style='flex: 1; min-width: 250px; background: {bg_grad}; padding: 25px; border-radius: 16px; box-shadow: 0 10px 15px -3px rgba(10, 43, 86, 0.08); border: 1px solid #E2E8F0; border-top: 5px solid {border_color};'>"
+        html += f"<div style='display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;'><span style='font-size: 1rem; color: #64748B; font-weight: 800; letter-spacing: 1px;'>{rank_text} PLACE</span><span style='font-size: 1.5rem;'>{icon}</span></div>"
+        html += f"<div style='font-size: 0.9rem; color: #0A2B56; font-weight: bold; margin-bottom: 5px;'>{grade}</div>"
+        html += f"<div style='font-size: 2.2rem; font-weight: 900; color: #0F172A; margin-bottom: 15px;'>{name} <span style='font-size: 1rem; font-weight: 600; color: #64748B;'>さん</span></div>"
+        html += f"<div style='display: inline-block; background-color: #F1F5F9; color: #0A2B56; padding: 6px 16px; border-radius: 8px; font-weight: 800; font-size: 1.2rem; border: 1px solid #E2E8F0;'>{time_val:.2f} <span style='font-size: 0.9rem;'>HOURS</span></div>"
+        html += "</div>"
+        
     html += '</div>'
     st.markdown(html, unsafe_allow_html=True)
 
@@ -354,7 +343,6 @@ if not df.empty:
         render_printable_table(agg_month, jh_grades, "📓 中学生の部")
         render_printable_table(agg_month, hs_grades, "🎓 高校生・その他")
         
-        # 印刷時に改ページを入れる
         st.markdown("<div style='page-break-before: always;'></div>", unsafe_allow_html=True)
         
         st.markdown("<h2 style='text-align: center; margin-bottom: 0; margin-top: 20px;'>🔥 学習時間ランキング（直近3ヶ月）</h2>", unsafe_allow_html=True)
