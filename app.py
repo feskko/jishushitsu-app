@@ -344,7 +344,7 @@ if not df.empty:
                 render_section_ranking(agg_data, hs_grades, "高校生・その他")
 
     with tab4:
-        st.info("ブラウザの印刷機能（Ctrl+P / Cmd+P）を使用してください。自動的にインクを節約した白黒の美しい表が出力されます。")
+        st.info("ブラウザの印刷機能（Ctrl+P / Cmd+P）を使用してください。")
         st.markdown("<div class='print-area'>", unsafe_allow_html=True)
         
         st.markdown("<h2 style='text-align: center; margin-bottom: 0;'>🏆 学習時間ランキング（今月）</h2>", unsafe_allow_html=True)
