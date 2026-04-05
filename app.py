@@ -10,52 +10,56 @@ import re
 # --- 1. ページ構成とエグゼクティブ・デザイン ---
 st.set_page_config(page_title="自習室利用管理システム", page_icon="icon.png", layout="wide")
 
-# デザイン設定（藍色基調でおしゃれに）
+# CSSによる徹底的なリデザイン（藍色基調でおしゃれに）
 st.markdown("""
 <style>
-    /* 背景色を薄い青に */
+    /* 全体の背景を薄い青に */
     .stApp {
         background-color: #e3f2fd;
         font-family: 'Noto Sans JP', sans-serif;
     }
 
-    /* メインヘッダー */
+    /* メインタイトル */
     .main-header {
         font-size: 3rem;
         font-weight: 800;
-        color: #1e3a8a;
+        color: #1e3a8a; /* 藍色 */
         border-bottom: 4px solid #1e3a8a;
         padding-bottom: 15px;
         margin-bottom: 2rem;
     }
 
-    /* カード風デザイン */
+    /* サイドバーを藍色（ネイビー）に */
+    [data-testid="stSidebar"] {
+        background-color: #1e3a8a;
+    }
+    [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h3, [data-testid="stSidebar"] label, [data-testid="stSidebar"] p {
+        color: #ffffff !important;
+    }
+
+    /* カード風のデザイン（白背景に藍色の影） */
     .stMetric, div[data-testid="stExpander"], div[data-testid="stDataFrameContainer"] {
         background-color: #ffffff;
         padding: 25px;
         border-radius: 20px;
-        box-shadow: 0 10px 15px -3px rgba(30, 58, 138, 0.08);
+        box-shadow: 0 10px 15px -3px rgba(30, 58, 138, 0.1);
         border: 1px solid #d1e3f3;
     }
 
-    /* サイドバーを藍色に */
-    [data-testid="stSidebar"] {
-        background-color: #1e3a8a;
-        color: #ffffff;
-    }
-    [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h3, [data-testid="stSidebar"] p, [data-testid="stSidebar"] label {
-        color: #ffffff !important;
-    }
-
-    /* 入室・退室のプレビュー表示 */
+    /* 時刻入力のプレビュー */
     .time-preview {
         font-size: 0.9rem;
         color: #1e3a8a;
-        margin-top: -10px;
+        margin-top: -15px;
+        margin-bottom: 10px;
         font-weight: 700;
+        background-color: #dbeafe;
+        padding: 2px 8px;
+        border-radius: 4px;
+        display: inline-block;
     }
 
-    /* 保存ボタンを藍色に */
+    /* 保存ボタンのデザイン */
     .stButton>button {
         width: 100%;
         border-radius: 12px;
@@ -64,16 +68,28 @@ st.markdown("""
         color: white;
         font-weight: 700;
         border: none;
-        transition: 0.3s;
+        box-shadow: 0 4px 6px -1px rgba(30, 58, 138, 0.3);
+        transition: all 0.3s ease;
     }
     .stButton>button:hover {
         background-color: #152c66;
         transform: translateY(-2px);
     }
+
+    /* タブのスタイル調整 */
+    .stTabs [data-baseweb="tab"] {
+        font-weight: 700;
+        color: #1e3a8a;
+    }
+    .stTabs [aria-selected="true"] {
+        background-color: #1e3a8a !important;
+        color: white !important;
+        border-radius: 8px 8px 0 0;
+    }
 </style>
 """, unsafe_allow_html=True)
 
-# --- 2. 認証・スプレッドシート設定 ---
+# --- 2. バックエンド設定 ---
 scopes = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
 
 if "GCP_SERVICE_ACCOUNT" in st.secrets:
@@ -81,7 +97,7 @@ if "GCP_SERVICE_ACCOUNT" in st.secrets:
     service_account_info = json.loads(secret_data) if isinstance(secret_data, str) else dict(secret_data)
     credentials = Credentials.from_service_account_info(service_account_info, scopes=scopes)
 else:
-    st.error("Secrets（合鍵）の設定ができていません。")
+    st.error("Secrets（合鍵）の設定が完了していません。")
     st.stop()
 
 gc = gspread.authorize(credentials)
@@ -108,7 +124,7 @@ def save_to_gs(df, sheet_name="メイン"):
     else:
         worksheet.update(range_name="A1", values=[['日付', '名前', '学年', '入室時間', '退室時間', '利用時間（時間）']])
 
-# --- 3. スマート・タイム・デコーダー ---
+# --- 3. スマート入力ロジック ---
 def smart_time_parse(t_str):
     if not t_str: return None
     clean_t = re.sub(r'[^0-9]', '', t_str)
@@ -121,10 +137,10 @@ def smart_time_parse(t_str):
         return datetime.strptime(t_str, "%H:%M").time()
     except: return None
 
-# --- 4. 画面表示 ---
+# --- 4. ユーザーインターフェース ---
 with st.sidebar:
     if os.path.exists("icon.png"): st.image("icon.png", width=80)
-    st.title("Registration")
+    st.title("業務メニュー")
     
     f_date = st.date_input("利用日", datetime.now())
     f_name = st.text_input("氏名", placeholder="名前を入力")
@@ -133,11 +149,12 @@ with st.sidebar:
     
     col_in, col_out = st.columns(2)
     with col_in:
-        f_start_raw = st.text_input("入室 (例:1700)", key="in")
+        f_start_raw = st.text_input("入室 (1700)", key="in")
         t_start = smart_time_parse(f_start_raw)
         if t_start: st.markdown(f"<p class='time-preview'>→ {t_start.strftime('%H:%M')}</p>", unsafe_allow_html=True)
+    
     with col_out:
-        f_end_raw = st.text_input("退室 (例:2130)", key="out")
+        f_end_raw = st.text_input("退室 (2130)", key="out")
         t_end = smart_time_parse(f_end_raw)
         if t_end: st.markdown(f"<p class='time-preview'>→ {t_end.strftime('%H:%M')}</p>", unsafe_allow_html=True)
     
@@ -152,12 +169,14 @@ with st.sidebar:
             new_row = pd.DataFrame([{'日付': pd.to_datetime(f_date), '名前': f_name, '学年': f_grade, '入室時間': t_start.strftime('%H:%M'), '退室時間': t_end.strftime('%H:%M'), '利用時間（時間）': duration}])
             df = pd.concat([df, new_row], ignore_index=True)
             save_to_gs(df)
-            st.success("保存完了！")
+            st.success("保存しました！")
             st.cache_data.clear()
             st.rerun()
+        else:
+            st.error("入力内容が足りません")
 
     st.markdown("---")
-    admin_pass = st.text_input("Admin Password", type="password")
+    admin_pass = st.text_input("管理者パスワード", type="password")
     if admin_pass == "admin123":
         if st.button("🚨 データをリセット"):
             save_to_gs(load_data(), "バックアップ")
@@ -165,15 +184,16 @@ with st.sidebar:
             st.cache_data.clear()
             st.rerun()
 
+# メインパネル
 st.markdown("<h1 class='main-header'>🏆 Study Hours Ranking</h1>", unsafe_allow_html=True)
 df = load_data()
 
 if not df.empty:
-    tab1, tab2, tab3 = st.tabs(["🗓 今月の戦い", "🔥 直近3ヶ月", "👑 殿堂入り（累計）"])
+    tab1, tab2, tab3 = st.tabs(["🗓 今月の戦い", "🔥 直近3ヶ月（逆転圏内）", "👑 殿堂入り（累計）"])
     
     def render_board(target_df):
         if target_df.empty:
-            st.info("集計可能なデータがありません")
+            st.info("データがまだありません")
             return
         
         agg = target_df.groupby(['名前', '学年'])['利用時間（時間）'].sum().reset_index()
@@ -188,7 +208,7 @@ if not df.empty:
         
         st.write("---")
         st.dataframe(agg, use_container_width=True, column_config={
-            "利用時間（時間）": st.column_config.ProgressColumn("学習時間", format="%.2f h", min_value=0, max_value=float(agg['利用時間（時間）'].max()))
+            "利用時間（時間）": st.column_config.ProgressColumn("学習時間", format="%.2f h", min_value=0, max_value=float(agg['利用時間（時間）'].max() if not agg.empty else 1))
         })
 
     with tab1: render_board(df[df['日付'].dt.month == datetime.now().month])
@@ -198,4 +218,4 @@ if not df.empty:
     with st.expander("📝 履歴を確認する"):
         st.dataframe(df.sort_values(by='日付', ascending=False), use_container_width=True)
 else:
-    st.info("データがありません。")
+    st.info("最初の記録を登録しましょう！")
