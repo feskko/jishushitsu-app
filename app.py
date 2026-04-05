@@ -6,28 +6,14 @@ from google.oauth2.service_account import Credentials
 import json
 import os
 
-
-# --- ページ設定（ブラウザのタブ名や幅の設定） ---
-# 変更後（画像ファイル名に！）
+# --- ページ設定（アイコンを icon.png に設定） ---
 st.set_page_config(page_title="自習室ランキング", page_icon="icon.png", layout="wide")
 
-# --- カスタムCSS（デザインの微調整） ---
+# --- カスタムCSS ---
 st.markdown("""
     <style>
-    .main {
-        background-color: #f8f9fa;
-    }
-    .stMetric {
-        background-color: #ffffff;
-        padding: 15px;
-        border-radius: 10px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-    }
-    div[data-testid="stExpander"] {
-        border: none;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-        background-color: white;
-    }
+    .main { background-color: #f8f9fa; }
+    .stMetric { background-color: #ffffff; padding: 15px; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
     </style>
     """, unsafe_allow_html=True)
 
@@ -46,10 +32,10 @@ else:
 
 gc = gspread.authorize(credentials)
 
-# ★自分のスプレッドシートURL
+# スプレッドシートURL
 SPREADSHEET_URL = "https://docs.google.com/spreadsheets/d/1C9xD5xD3ZvGEV6IPuD2_dj9f_oqAIz_v923PMRabBu4/edit"
 
-@st.cache_data(ttl=60) # 1分間はデータをキャッシュして高速化
+@st.cache_data(ttl=60)
 def load_data_from_gs():
     try:
         workbook = gc.open_by_url(SPREADSHEET_URL)
@@ -70,19 +56,19 @@ def save_to_gs(df, sheet_name="メイン"):
     worksheet.clear()
     if not df.empty:
         save_df = df.copy()
-        # ↓ ここを「絶対に日付として扱う」ように修正しました
+        # 日付型に変換してから文字列にする（エラー対策）
         save_df['日付'] = pd.to_datetime(save_df['日付']).dt.strftime('%Y-%m-%d')
         save_df = save_df.fillna("")
         data_to_upload = [save_df.columns.tolist()] + save_df.values.tolist()
         worksheet.update(range_name="A1", values=data_to_upload)
     else:
-        worksheet.update(range_name="A1", values=[['日付', '名前', '学年', '入室時間', '退室時間', '利用時間（時間）']])="A1", values=[['日付', '名前', '学年', '入室時間', '退室時間', '利用時間（時間）']])
+        worksheet.update(range_name="A1", values=[['日付', '名前', '学年', '入室時間', '退室時間', '利用時間（時間）']])
 
-# --- アプリメイン表示 ---
+# --- メイン画面 ---
 st.title("🥇 自習室 利用時間ランキング")
 df = load_data_from_gs()
 
-# サイドバー：入力フォーム
+# サイドバー
 with st.sidebar:
     st.header("📋 新規記録")
     with st.form("record_form", clear_on_submit=True):
@@ -111,13 +97,8 @@ with st.sidebar:
                 st.error("名前を入力してください")
 
     st.divider()
-    st.header("⚙️ 管理画面")
-    if st.button("データをリセット（バックアップ作成）"):
-        save_to_gs(df, "バックアップ")
-        save_to_gs(pd.DataFrame(columns=df.columns), "メイン")
-        st.cache_data.clear()
-        st.rerun()
-    if st.button("バックアップから復元"):
+    st.header("⚙️ 管理メニュー")
+    if st.button("復元（バックアップから戻す）"):
         workbook = gc.open_by_url(SPREADSHEET_URL)
         backup_df = pd.DataFrame(workbook.worksheet("バックアップ").get_all_records())
         save_to_gs(backup_df, "メイン")
@@ -126,41 +107,34 @@ with st.sidebar:
 
 # メインコンテンツ
 if not df.empty:
-    tabs = st.tabs(["🗓 今月の集計", "期間：直近3ヶ月", "🏆 全期間ランキング"])
+    tabs = st.tabs(["🗓 今月", "直近3ヶ月", "🏆 全期間"])
     
-    # ランキング表示関数
     def render_ranking(target_df):
         if target_df.empty:
-            st.info("対象期間のデータがありません")
+            st.info("データがありません")
             return
-        
         agg = target_df.groupby(['名前', '学年'])['利用時間（時間）'].sum().reset_index()
         agg = agg.sort_values(by='利用時間（時間）', ascending=False).reset_index(drop=True)
         agg.index += 1
         
-        # トップ3のメダル表示
         cols = st.columns(3)
         medals = ["🥇 1位", "🥈 2位", "🥉 3位"]
         for i in range(min(3, len(agg))):
             with cols[i]:
-                st.metric(label=f"{medals[i]}：{agg.iloc[i]['名前']}さん", value=f"{agg.iloc[i]['利用時間（時間）']}時間", help=f"学年: {agg.iloc[i]['学年']}")
-        
+                st.metric(label=f"{medals[i]}：{agg.iloc[i]['名前']}さん", value=f"{agg.iloc[i]['利用時間（時間）']}h")
         st.write("---")
         st.dataframe(agg, use_container_width=True)
 
-    with tabs[0]: # 今月
+    with tabs[0]:
         this_month_df = df[df['日付'].dt.month == datetime.now().month]
         render_ranking(this_month_df)
-        
-    with tabs[1]: # 直近3ヶ月
-        three_months_ago = datetime.now() - timedelta(days=90)
-        recent_df = df[df['日付'] >= three_months_ago]
+    with tabs[1]:
+        recent_df = df[df['日付'] >= (datetime.now() - timedelta(days=90))]
         render_ranking(recent_df)
-        
-    with tabs[2]: # 全期間
+    with tabs[2]:
         render_ranking(df)
 
-    with st.expander("📝 全ての利用履歴を表示"):
+    with st.expander("📝 履歴一覧"):
         st.table(df.sort_values(by='日付', ascending=False))
 else:
-    st.info("データがまだ登録されていません。サイドバーから入力を始めてください。")
+    st.info("データがありません。")
