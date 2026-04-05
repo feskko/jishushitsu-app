@@ -70,12 +70,13 @@ def save_to_gs(df, sheet_name="メイン"):
     worksheet.clear()
     if not df.empty:
         save_df = df.copy()
-        save_df['日付'] = save_df['日付'].dt.strftime('%Y-%m-%d')
+        # ↓ ここを「絶対に日付として扱う」ように修正しました
+        save_df['日付'] = pd.to_datetime(save_df['日付']).dt.strftime('%Y-%m-%d')
         save_df = save_df.fillna("")
         data_to_upload = [save_df.columns.tolist()] + save_df.values.tolist()
         worksheet.update(range_name="A1", values=data_to_upload)
     else:
-        worksheet.update(range_name="A1", values=[['日付', '名前', '学年', '入室時間', '退室時間', '利用時間（時間）']])
+        worksheet.update(range_name="A1", values=[['日付', '名前', '学年', '入室時間', '退室時間', '利用時間（時間）']])="A1", values=[['日付', '名前', '学年', '入室時間', '退室時間', '利用時間（時間）']])
 
 # --- アプリメイン表示 ---
 st.title("🥇 自習室 利用時間ランキング")
