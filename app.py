@@ -32,7 +32,7 @@ gc = gspread.authorize(credentials)
 
 # --- スプレッドシート設定 ---
 # ★ここを自分のスプレッドシートのURLに書き換えてください！
-SPREADSHEET_URL = "ここにあなたのスプレッドシートURLを貼り付け" 
+SPREADSHEET_URL = "https://docs.google.com/spreadsheets/d/1C9xD5xD3ZvGEV6IPuD2_dj9f_oqAIz_v923PMRabBu4/edit?gid=0#gid=0" 
 
 try:
     workbook = gc.open_by_url(SPREADSHEET_URL)
