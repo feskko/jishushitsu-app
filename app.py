@@ -177,6 +177,7 @@ st.markdown("<div class='main-title'>🏆 塾生学習時間ランキング</div
 df = load_data()
 
 # オリジナルデザインのトップ3カード描画関数
+# オリジナルデザインのトップ3カード描画関数
 def render_premium_cards(agg):
     if agg.empty: return
     html = '<div style="display: flex; gap: 20px; margin-bottom: 30px; flex-wrap: wrap;">'
@@ -188,18 +189,15 @@ def render_premium_cards(agg):
         grade = agg.iloc[i]['学年']
         time_val = agg.iloc[i]['利用時間（時間）']
         
-        html += f"""
-        <div style="flex: 1; min-width: 250px; background: #FFFFFF; padding: 25px; border-radius: 12px; border-left: 6px solid {border_color}; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); border-top: 1px solid #E2E8F0; border-right: 1px solid #E2E8F0; border-bottom: 1px solid #E2E8F0;">
-            <div style="font-size: 0.95rem; color: #64748B; font-weight: bold; margin-bottom: 8px;">{rank_text} / {grade}</div>
-            <div style="font-size: 2.2rem; font-weight: 800; color: #0F172A; margin-bottom: 12px;">{name} <span style="font-size: 1.2rem; font-weight: 600; color: #475569;">さん</span></div>
-            <div style="display: inline-block; background-color: #ECFDF5; color: #059669; padding: 4px 16px; border-radius: 20px; font-weight: 700; font-size: 1.1rem;">
-                ↑ {time_val:.2f} 時間
-            </div>
-        </div>
-        """
+        # Markdownの誤作動を防ぐため、HTMLタグ内の余分な空白・改行を削除
+        html += f"<div style='flex: 1; min-width: 250px; background: #FFFFFF; padding: 25px; border-radius: 12px; border-left: 6px solid {border_color}; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); border-top: 1px solid #E2E8F0; border-right: 1px solid #E2E8F0; border-bottom: 1px solid #E2E8F0;'>"
+        html += f"<div style='font-size: 0.95rem; color: #64748B; font-weight: bold; margin-bottom: 8px;'>{rank_text} / {grade}</div>"
+        html += f"<div style='font-size: 2.2rem; font-weight: 800; color: #0F172A; margin-bottom: 12px;'>{name} <span style='font-size: 1.2rem; font-weight: 600; color: #475569;'>さん</span></div>"
+        html += f"<div style='display: inline-block; background-color: #ECFDF5; color: #059669; padding: 4px 16px; border-radius: 20px; font-weight: 700; font-size: 1.1rem;'>↑ {time_val:.2f} 時間</div>"
+        html += "</div>"
+        
     html += '</div>'
     st.markdown(html, unsafe_allow_html=True)
-
 # 印刷用画面の生成関数
 def render_printable_table(agg, title):
     if agg.empty: return
