@@ -33,6 +33,17 @@ st.markdown("""
         border-bottom: 3px solid #E2E8F0;
     }
 
+    /* 部門ごとのサブタイトル */
+    .section-title {
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: #1E293B;
+        margin-top: 2rem;
+        margin-bottom: 1rem;
+        padding-left: 10px;
+        border-left: 5px solid #3B82F6;
+    }
+
     /* サイドバー */
     [data-testid="stSidebar"] { background-color: #1E293B; }
     [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3, [data-testid="stSidebar"] p, [data-testid="stSidebar"] label {
@@ -49,6 +60,7 @@ st.markdown("""
         }
         .stApp { background-color: white !important; }
         .print-area { display: block !important; }
+        .section-title { color: black !important; border-left: none; border-bottom: 2px solid black; }
     }
 </style>
 """, unsafe_allow_html=True)
@@ -87,27 +99,31 @@ def save_to_gs(df, sheet_name="メイン"):
     else:
         worksheet.update(range_name="A1", values=[['日付', '名前', '学年', '入室時間', '退室時間', '利用時間（時間）']])
 
-# --- 3. 時刻フォーマット関数 ---
-def format_time_str(t_str):
-    if not t_str: return ""
-    clean = re.sub(r'[^0-9]', '', str(t_str))
-    if len(clean) == 3: clean = "0" + clean
-    if len(clean) == 4: return f"{clean[:2]}:{clean[2:]}"
-    return t_str
+# --- 3. 時刻フォーマット関数（1900 -> 19:00 の魔法） ---
+if "in_time" not in st.session_state: st.session_state.in_time = ""
+if "out_time" not in st.session_state: st.session_state.out_time = ""
+
+def auto_format_times():
+    for key in ["in_time", "out_time"]:
+        val = st.session_state[key]
+        if not val: continue
+        if ":" in val: continue # 既にコロンがあれば何もしない
+        clean = re.sub(r'[^0-9]', '', str(val))
+        if len(clean) == 3: clean = "0" + clean
+        if len(clean) == 4:
+            st.session_state[key] = f"{clean[:2]}:{clean[2:]}"
 
 def parse_final_time(t_str):
     try: return datetime.strptime(t_str, "%H:%M").time()
     except: return None
 
 # --- 4. ユーザーインターフェース（サイドバー） ---
-if "confirm_data" not in st.session_state:
-    st.session_state.confirm_data = None
+if "confirm_data" not in st.session_state: st.session_state.confirm_data = None
 
 with st.sidebar:
     if os.path.exists("icon.png"): st.image("icon.png", width=60)
     
     if st.session_state.confirm_data is None:
-        # 【入力モード】
         st.markdown("### 📝 ENTRY PANEL")
         f_date = st.date_input("利用日", datetime.now())
         f_name = st.text_input("氏名", placeholder="山田 太郎")
@@ -115,35 +131,62 @@ with st.sidebar:
         f_grade = st.selectbox("学年", grades)
         
         col_in, col_out = st.columns(2)
-        with col_in: raw_in = st.text_input("入室 (例:1900)")
-        with col_out: raw_out = st.text_input("退室 (例:2130)")
+        with col_in:
+            st.text_input("入室", placeholder="19:00", key="in_time", on_change=auto_format_times)
+        with col_out:
+            st.text_input("退室", placeholder="21:30", key="out_time", on_change=auto_format_times)
         
+        st.markdown("<br>", unsafe_allow_html=True)
         if st.button("確認画面へ進む", use_container_width=True):
-            fmt_in = format_time_str(raw_in)
-            fmt_out = format_time_str(raw_out)
-            t_start = parse_final_time(fmt_in)
-            t_end = parse_final_time(fmt_out)
+            t_start = parse_final_time(st.session_state.in_time)
+            t_end = parse_final_time(st.session_state.out_time)
             
             if f_name and t_start and t_end:
                 st.session_state.confirm_data = {
                     "date": f_date, "name": f_name, "grade": f_grade,
-                    "in_time": fmt_in, "out_time": fmt_out,
+                    "in_time": st.session_state.in_time, "out_time": st.session_state.out_time,
                     "t_start": t_start, "t_end": t_end
                 }
                 st.rerun()
             else:
-                st.error("入力内容に誤りがあります。")
+                st.error("入力内容に誤りがあります（時刻は 1900 または 19:00）")
         
         st.markdown("<hr>", unsafe_allow_html=True)
         admin_pass = st.text_input("Admin Password", type="password")
         if admin_pass == "admin123":
-            if st.button("🚨 データをリセット", use_container_width=True):
+            # 個別データ削除機能
+            st.markdown("#### 🗑️ データの個別削除")
+            df_for_delete = load_data()
+            if not df_for_delete.empty:
+                # 最新のデータが上に来るようにリストを作成
+                options = [("-1", "-- 削除する記録を選択 --")]
+                for i in reversed(df_for_delete.index):
+                    row = df_for_delete.loc[i]
+                    d_str = row['日付'].strftime('%m/%d') if pd.notnull(row['日付']) else "不明"
+                    disp = f"{d_str} | {row['名前']} ({row['入室時間']}-{row['退室時間']})"
+                    options.append((str(i), disp))
+                
+                selected_del = st.selectbox("間違えた記録を消す", options, format_func=lambda x: x[1])
+                if st.button("🗑️ この記録を削除", use_container_width=True):
+                    if selected_del[0] != "-1":
+                        df_for_delete = df_for_delete.drop(int(selected_del[0])).reset_index(drop=True)
+                        save_to_gs(df_for_delete)
+                        st.success("削除しました。")
+                        st.cache_data.clear()
+                        st.rerun()
+                    else:
+                        st.warning("記録を選択してください。")
+            else:
+                st.info("削除できるデータがありません。")
+
+            st.markdown("<br>", unsafe_allow_html=True)
+            st.markdown("#### 🚨 システム全体リセット")
+            if st.button("全データをリセット", use_container_width=True):
                 save_to_gs(load_data(), "バックアップ")
                 save_to_gs(pd.DataFrame(columns=['日付', '名前', '学年', '入室時間', '退室時間', '利用時間（時間）']), "メイン")
                 st.cache_data.clear()
                 st.rerun()
     else:
-        # 【確認モード】
         d = st.session_state.confirm_data
         st.markdown("### ⚠️ 登録内容の確認")
         st.markdown(f"""
@@ -164,6 +207,9 @@ with st.sidebar:
             new_row = pd.DataFrame([{'日付': pd.to_datetime(d['date']), '名前': d['name'], '学年': d['grade'], '入室時間': d['in_time'], '退室時間': d['out_time'], '利用時間（時間）': duration}])
             df = pd.concat([df, new_row], ignore_index=True)
             save_to_gs(df)
+            
+            st.session_state.in_time = ""
+            st.session_state.out_time = ""
             st.session_state.confirm_data = None
             st.cache_data.clear()
             st.rerun()
@@ -172,11 +218,10 @@ with st.sidebar:
             st.session_state.confirm_data = None
             st.rerun()
 
-# --- 5. メインパネル（ランキング） ---
+# --- 5. メインパネル（部門別ランキング） ---
 st.markdown("<div class='main-title'>🏆 塾生学習時間ランキング</div>", unsafe_allow_html=True)
 df = load_data()
 
-# オリジナルデザインのトップ3カード描画関数
 # オリジナルデザインのトップ3カード描画関数
 def render_premium_cards(agg):
     if agg.empty: return
@@ -189,30 +234,51 @@ def render_premium_cards(agg):
         grade = agg.iloc[i]['学年']
         time_val = agg.iloc[i]['利用時間（時間）']
         
-        # Markdownの誤作動を防ぐため、HTMLタグ内の余分な空白・改行を削除
         html += f"<div style='flex: 1; min-width: 250px; background: #FFFFFF; padding: 25px; border-radius: 12px; border-left: 6px solid {border_color}; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); border-top: 1px solid #E2E8F0; border-right: 1px solid #E2E8F0; border-bottom: 1px solid #E2E8F0;'>"
         html += f"<div style='font-size: 0.95rem; color: #64748B; font-weight: bold; margin-bottom: 8px;'>{rank_text} / {grade}</div>"
         html += f"<div style='font-size: 2.2rem; font-weight: 800; color: #0F172A; margin-bottom: 12px;'>{name} <span style='font-size: 1.2rem; font-weight: 600; color: #475569;'>さん</span></div>"
         html += f"<div style='display: inline-block; background-color: #ECFDF5; color: #059669; padding: 4px 16px; border-radius: 20px; font-weight: 700; font-size: 1.1rem;'>↑ {time_val:.2f} 時間</div>"
         html += "</div>"
-        
     html += '</div>'
     st.markdown(html, unsafe_allow_html=True)
-# 印刷用画面の生成関数
-def render_printable_table(agg, title):
-    if agg.empty: return
-    print_html = f"<h2 style='color: black; margin-top: 0;'>{title}</h2>"
-    print_html += "<table style='width: 100%; border-collapse: collapse; font-family: sans-serif; color: black; margin-bottom: 40px;'>"
-    print_html += "<tr><th style='border: 1px solid #000; padding: 12px; background-color: #f1f5f9; text-align: center;'>順位</th><th style='border: 1px solid #000; padding: 12px; background-color: #f1f5f9;'>氏名</th><th style='border: 1px solid #000; padding: 12px; background-color: #f1f5f9; text-align: center;'>学年</th><th style='border: 1px solid #000; padding: 12px; background-color: #f1f5f9; text-align: right;'>トータル学習時間</th></tr>"
-    for i, row in agg.iterrows():
-        print_html += f"<tr><td style='border: 1px solid #000; padding: 10px; text-align: center;'>{i+1}位</td><td style='border: 1px solid #000; padding: 10px; font-weight: bold;'>{row['名前']}</td><td style='border: 1px solid #000; padding: 10px; text-align: center;'>{row['学年']}</td><td style='border: 1px solid #000; padding: 10px; text-align: right;'>{row['利用時間（時間）']:.2f} h</td></tr>"
+
+# 部門別にランキングを描画する関数
+def render_section_ranking(full_agg, target_grades, section_title, icon):
+    section_df = full_agg[full_agg['学年'].isin(target_grades)].reset_index(drop=True)
+    st.markdown(f"<div class='section-title'>{icon} {section_title}</div>", unsafe_allow_html=True)
+    
+    if section_df.empty:
+        st.info(f"{section_title}のデータはまだありません。")
+        return
+        
+    render_premium_cards(section_df)
+    section_df.index += 1
+    st.dataframe(section_df, use_container_width=True, hide_index=True, column_config={
+        "名前": st.column_config.TextColumn("氏名"),
+        "学年": st.column_config.TextColumn("学年"),
+        "利用時間（時間）": st.column_config.ProgressColumn("トータル学習時間", format="%.2f h", min_value=0, max_value=float(section_df['利用時間（時間）'].max()))
+    })
+
+# 印刷用テーブル描画関数
+def render_printable_table(full_agg, target_grades, title):
+    section_df = full_agg[full_agg['学年'].isin(target_grades)].reset_index(drop=True)
+    if section_df.empty: return
+    
+    print_html = f"<h3 style='color: black; margin-top: 30px; border-bottom: 2px solid #000; padding-bottom: 5px;'>{title}</h3>"
+    print_html += "<table style='width: 100%; border-collapse: collapse; font-family: sans-serif; color: black; margin-bottom: 20px; font-size: 0.9rem;'>"
+    print_html += "<tr><th style='border: 1px solid #000; padding: 8px; background-color: #f1f5f9; text-align: center; width: 15%;'>順位</th><th style='border: 1px solid #000; padding: 8px; background-color: #f1f5f9; width: 45%;'>氏名</th><th style='border: 1px solid #000; padding: 8px; background-color: #f1f5f9; text-align: center; width: 15%;'>学年</th><th style='border: 1px solid #000; padding: 8px; background-color: #f1f5f9; text-align: right; width: 25%;'>学習時間</th></tr>"
+    for i, row in section_df.iterrows():
+        print_html += f"<tr><td style='border: 1px solid #000; padding: 6px; text-align: center;'>{i+1}位</td><td style='border: 1px solid #000; padding: 6px; font-weight: bold;'>{row['名前']}</td><td style='border: 1px solid #000; padding: 6px; text-align: center;'>{row['学年']}</td><td style='border: 1px solid #000; padding: 6px; text-align: right;'>{row['利用時間（時間）']:.2f} h</td></tr>"
     print_html += "</table>"
     st.markdown(print_html, unsafe_allow_html=True)
 
 if not df.empty:
     tab1, tab2, tab3, tab4 = st.tabs(["🗓 今月の集計", "🔥 直近3ヶ月", "👑 殿堂入り（累計）", "🖨️ 印刷用画面"])
     
-    # データの集計処理
+    elem_grades = [f"小{i}" for i in range(1, 7)]
+    jh_grades = [f"中{i}" for i in range(1, 4)]
+    hs_grades = [f"高{i}" for i in range(1, 4)] + ["既卒/その他"]
+    
     def get_agg_data(target_df):
         if target_df.empty: return pd.DataFrame()
         agg = target_df.groupby(['名前', '学年'])['利用時間（時間）'].sum().reset_index()
@@ -222,26 +288,29 @@ if not df.empty:
     agg_3months = get_agg_data(df[df['日付'] >= (datetime.now() - timedelta(days=90))])
     agg_all = get_agg_data(df)
 
-    # 画面描画
     for tab, agg_data in zip([tab1, tab2, tab3], [agg_month, agg_3months, agg_all]):
         with tab:
-            if agg_data.empty: st.info("データがありません。")
+            if agg_data.empty: 
+                st.info("データがありません。")
             else:
-                render_premium_cards(agg_data)
-                agg_data.index += 1
-                st.dataframe(agg_data, use_container_width=True, hide_index=True, column_config={
-                    "名前": st.column_config.TextColumn("氏名"),
-                    "学年": st.column_config.TextColumn("学年"),
-                    "利用時間（時間）": st.column_config.ProgressColumn("トータル学習時間", format="%.2f h", min_value=0, max_value=float(agg_data['利用時間（時間）'].max()))
-                })
+                render_section_ranking(agg_data, elem_grades, "小学生の部", "🎒")
+                render_section_ranking(agg_data, jh_grades, "中学生の部", "📓")
+                render_section_ranking(agg_data, hs_grades, "高校生・その他の部", "🎓")
 
     with tab4:
         st.markdown("### 🖨️ 張り出し用ランキング印刷")
         st.info("ブラウザの印刷機能（`Ctrl + P` または `Cmd + P`）を利用してください。白黒で表のみが綺麗に出力されます。")
         st.markdown("<div class='print-area'>", unsafe_allow_html=True)
-        render_printable_table(agg_month, "【今月の集計】学習時間ランキング")
-        render_printable_table(agg_3months, "【直近3ヶ月】学習時間ランキング")
-        render_printable_table(agg_all, "【殿堂入り】学習時間ランキング")
+        
+        st.markdown("<h2 style='text-align: center; border-bottom: 3px solid black; padding-bottom: 10px;'>🏆 今月の学習時間ランキング</h2>", unsafe_allow_html=True)
+        render_printable_table(agg_month, elem_grades, "🎒 小学生の部")
+        render_printable_table(agg_month, jh_grades, "📓 中学生の部")
+        render_printable_table(agg_month, hs_grades, "🎓 高校生・その他の部")
+        
+        st.markdown("<br><br><h2 style='text-align: center; border-bottom: 3px solid black; padding-bottom: 10px;'>🔥 直近3ヶ月 学習時間ランキング</h2>", unsafe_allow_html=True)
+        render_printable_table(agg_3months, elem_grades, "🎒 小学生の部")
+        render_printable_table(agg_3months, jh_grades, "📓 中学生の部")
+        render_printable_table(agg_3months, hs_grades, "🎓 高校生・その他の部")
         st.markdown("</div>", unsafe_allow_html=True)
 
     with st.expander("📝 過去のすべての履歴を確認する"):
