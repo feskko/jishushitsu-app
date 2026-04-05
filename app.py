@@ -163,19 +163,19 @@ def save_to_gs(df, sheet_name="メイン"):
     else:
         worksheet.update(range_name="A1", values=[['日付', '名前', '学年', '入室時間', '退室時間', '利用時間（時間）']])
 
-# --- 3. 時刻フォーマット（1900 -> 19:00 の魔法） ---
-if "in_time" not in st.session_state: st.session_state.in_time = ""
-if "out_time" not in st.session_state: st.session_state.out_time = ""
+# --- 3. セッション管理と時刻フォーマット ---
+if "form_key" not in st.session_state:
+    st.session_state.form_key = 0
 
 def auto_format_times():
-    for key in ["in_time", "out_time"]:
-        val = st.session_state[key]
-        if not val: continue
-        if ":" in val: continue
+    for prefix in ["in_time", "out_time"]:
+        k = f"{prefix}_{st.session_state.form_key}"
+        val = st.session_state.get(k, "")
+        if not val or ":" in val: continue
         clean = re.sub(r'[^0-9]', '', str(val))
         if len(clean) == 3: clean = "0" + clean
         if len(clean) == 4:
-            st.session_state[key] = f"{clean[:2]}:{clean[2:]}"
+            st.session_state[k] = f"{clean[:2]}:{clean[2:]}"
 
 def parse_final_time(t_str):
     try: return datetime.strptime(t_str, "%H:%M").time()
@@ -188,23 +188,32 @@ with st.sidebar:
     st.markdown("<h2 style='color:white; margin-bottom: 20px;'>[TKG]新浦安</h2>", unsafe_allow_html=True)
     
     f_date = st.date_input("利用日", datetime.now())
-    f_name = st.text_input("氏名", placeholder="山田 太郎")
+    
+    # 登録ごとにキーを切り替えてフォームをリセットする設計
+    k_name = f"name_{st.session_state.form_key}"
+    k_in = f"in_time_{st.session_state.form_key}"
+    k_out = f"out_time_{st.session_state.form_key}"
+    
+    f_name = st.text_input("氏名", placeholder="山田 太郎", key=k_name)
     grades = [f"小{i}" for i in range(1, 7)] + [f"中{i}" for i in range(1, 4)] + [f"高{i}" for i in range(1, 4)] + ["既卒/その他"]
     f_grade = st.selectbox("学年", grades)
     
     col_in, col_out = st.columns(2)
     with col_in:
-        st.text_input("入室", placeholder="19:00", key="in_time", on_change=auto_format_times)
+        st.text_input("入室", placeholder="19:00", key=k_in, on_change=auto_format_times)
     with col_out:
-        st.text_input("退室", placeholder="21:30", key="out_time", on_change=auto_format_times)
+        st.text_input("退室", placeholder="21:30", key=k_out, on_change=auto_format_times)
     
-    disp_in = st.session_state.in_time if st.session_state.in_time else "--:--"
-    disp_out = st.session_state.out_time if st.session_state.out_time else "--:--"
+    val_in = st.session_state.get(k_in, "")
+    val_out = st.session_state.get(k_out, "")
+    disp_in = val_in if val_in else "--:--"
+    disp_out = val_out if val_out else "--:--"
+    
     st.markdown(f"<div style='background-color: rgba(255,255,255,0.1); padding: 8px; border-radius: 6px; color: #E2E8F0; font-size: 0.95rem; text-align: center; margin-top: -10px; margin-bottom: 20px; font-weight: bold;'>🕒 {disp_in} 〜 {disp_out}</div>", unsafe_allow_html=True)
     
     if st.button("記録を登録する", use_container_width=True):
-        t_start = parse_final_time(st.session_state.in_time)
-        t_end = parse_final_time(st.session_state.out_time)
+        t_start = parse_final_time(val_in)
+        t_end = parse_final_time(val_out)
         
         if f_name and t_start and t_end:
             start_dt = datetime.combine(f_date, t_start)
@@ -213,12 +222,12 @@ with st.sidebar:
             duration = round((end_dt - start_dt).total_seconds() / 3600, 2)
             
             df = load_data()
-            new_row = pd.DataFrame([{'日付': pd.to_datetime(f_date), '名前': f_name, '学年': f_grade, '入室時間': st.session_state.in_time, '退室時間': st.session_state.out_time, '利用時間（時間）': duration}])
+            new_row = pd.DataFrame([{'日付': pd.to_datetime(f_date), '名前': f_name, '学年': f_grade, '入室時間': val_in, '退室時間': val_out, '利用時間（時間）': duration}])
             df = pd.concat([df, new_row], ignore_index=True)
             save_to_gs(df)
             
-            st.session_state.in_time = ""
-            st.session_state.out_time = ""
+            # エラー回避: 状態の直接書き換えではなく、ウィジェットのIDを更新して白紙にする
+            st.session_state.form_key += 1 
             st.success(f"✓ {f_name}さんの記録を保存しました。")
             st.cache_data.clear()
             st.rerun()
@@ -249,7 +258,7 @@ with st.sidebar:
             else:
                 st.warning("記録を選択してください。")
     
-    st.markdown("<div style='text-align: center; font-size: 0.75rem; color: #94A3B8; margin-top: 40px;'>Tokyo Kobetsu Shido Gakuin<br>Study Room System v3.0</div>", unsafe_allow_html=True)
+    st.markdown("<div style='text-align: center; font-size: 0.75rem; color: #94A3B8; margin-top: 40px;'>Tokyo Kobetsu Shido Gakuin<br>Study Room System v3.1</div>", unsafe_allow_html=True)
 
 # --- 5. メインパネル（部門別ランキング） ---
 st.markdown("<div class='main-title'>STUDY HOURS RANKING</div>", unsafe_allow_html=True)
