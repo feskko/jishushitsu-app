@@ -180,7 +180,7 @@ with st.sidebar:
     
     st.markdown("<h2 style='color:white; margin-bottom: 20px;'>[TKG]新浦安教室</h2>", unsafe_allow_html=True)
     
-    # 💡【機能追加1】 未来の日付を選べないように max_value を設定
+    # 未来の日付を選べないように max_value を設定
     f_date = st.date_input("利用日", jst_now.date(), max_value=jst_now.date())
     
     k_name = f"name_{st.session_state.form_key}"
@@ -208,7 +208,7 @@ with st.sidebar:
         t_start = parse_final_time(val_in)
         t_end = parse_final_time(val_out)
         
-        # 💡【機能追加2】 入力された名前からスペースを強制削除（表記ゆれ対策）
+        # 入力された名前からスペースを強制削除（表記ゆれ対策）
         f_name_clean = f_name.replace(" ", "").replace("　", "")
         
         if f_name_clean and t_start and t_end:
@@ -263,8 +263,8 @@ def render_premium_cards(agg):
     if agg.empty: return
     html = '<div style="display: flex; gap: 20px; margin-bottom: 20px; flex-wrap: wrap;">'
     
-    # 💡【機能追加3】 上位3件を抽出してカードで表示（同率1位等にも対応）
-    top_rows = agg.head(3)
+    # 💡同率3位が複数いた場合でも全員漏れなくカード表示させる修正
+    top_rows = agg[agg['順位'] <= 3]
     
     for i, row in top_rows.iterrows():
         rank_val = row['順位']
@@ -299,7 +299,7 @@ def render_section_ranking(full_agg, target_grades, section_title):
         st.info("集計データがありません。")
         return
     
-    # 💡【機能追加3】 同率の場合は同じ順位を割り当て（1位、1位、3位...）
+    # 同率の場合は同じ順位を割り当て（1位、1位、3位...）
     section_df['順位'] = section_df['利用時間（時間）'].rank(method='min', ascending=False).astype(int)
     
     render_premium_cards(section_df)
