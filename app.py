@@ -7,6 +7,7 @@ import json
 import os
 import re
 import base64
+import streamlit.components.v1 as components
 
 # 日本時間の「今」を取得（海外サーバーでの時間ズレ対策）
 jst_now = datetime.utcnow() + timedelta(hours=9)
@@ -14,11 +15,22 @@ jst_now = datetime.utcnow() + timedelta(hours=9)
 # --- 1. ページ構成（TKGブルーホライズン・コンセプト） ---
 st.set_page_config(page_title="TKG Study Room Analytics", page_icon="icon.png", layout="wide")
 
-# 💡ホーム画面アイコン（Apple Touch Icon）を画像から自動生成（エラー修正済み）
+# --- ホーム画面用アイコンの強制上書き処理 ---
 if os.path.exists("icon.png"):
     with open("icon.png", "rb") as f:
         img_b64 = base64.b64encode(f.read()).decode()
-    st.markdown(f'<link rel="apple-touch-icon" href="data:image/png;base64,{img_b64}">', unsafe_allow_html=True)
+    js_code = f"""
+    <script>
+        const doc = window.parent.document;
+        let links = doc.querySelectorAll("link[rel~='apple-touch-icon']");
+        links.forEach(link => link.remove());
+        let newLink = doc.createElement('link');
+        newLink.rel = 'apple-touch-icon';
+        newLink.href = 'data:image/png;base64,{img_b64}';
+        doc.head.appendChild(newLink);
+    </script>
+    """
+    components.html(js_code, height=0, width=0)
 
 st.markdown("""
 <style>
