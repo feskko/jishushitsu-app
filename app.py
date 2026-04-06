@@ -6,6 +6,7 @@ from google.oauth2.service_account import Credentials
 import json
 import os
 import re
+import base64
 
 # 日本時間の「今」を取得（海外サーバーでの時間ズレ対策）
 jst_now = datetime.utcnow() + timedelta(hours=9)
@@ -13,7 +14,15 @@ jst_now = datetime.utcnow() + timedelta(hours=9)
 # --- 1. ページ構成（TKGブルーホライズン・コンセプト） ---
 st.set_page_config(page_title="TKG Study Room Analytics", page_icon="icon.png", layout="wide")
 
-st.markdown("""
+# ホーム画面アイコン（Apple Touch Icon）をローカル画像から自動生成
+apple_icon_tag = ""
+if os.path.exists("icon.png"):
+    with open("icon.png", "rb") as f:
+        img_b64 = base64.b64encode(f.read()).decode()
+    apple_icon_tag = f'<link rel="apple-touch-icon" href="data:image/png;base64,{img_b64}">'
+
+st.markdown(f"""
+{apple_icon_tag}
 <style>
     /* ========== システムUIの完全非表示 ========== */
     #MainMenu, header, footer, [data-testid="stToolbar"] {visibility: hidden !important; display: none !important;}
@@ -212,7 +221,6 @@ with st.sidebar:
             start_dt = datetime.combine(f_date, t_start)
             end_dt = datetime.combine(f_date, t_end)
             
-            # 💡【逆転ブロック】退室時刻が開始時刻より前、または同じ場合は保存しない
             if end_dt <= start_dt:
                 st.error("⚠️ 退室時刻は入室時刻より後の時間で入力してください")
             else:
@@ -254,7 +262,7 @@ with st.sidebar:
             else:
                 st.warning("記録を選択してください。")
     
-    st.markdown("<div style='text-align: center; font-size: 0.75rem; color: #94A3B8; margin-top: 40px;'>Tokyo Kobetsu Shido Gakuin<br>Study Room System v3.6</div>", unsafe_allow_html=True)
+    st.markdown("<div style='text-align: center; font-size: 0.75rem; color: #94A3B8; margin-top: 40px;'>Tokyo Kobetsu Shido Gakuin<br>Study Room System v3.7</div>", unsafe_allow_html=True)
 
 # --- 5. メインパネル（部門別ランキング） ---
 st.markdown("<div class='main-title'>STUDY HOURS RANKING</div>", unsafe_allow_html=True)
@@ -264,7 +272,6 @@ def render_premium_cards(agg):
     if agg.empty: return
     html = '<div style="display: flex; gap: 20px; margin-bottom: 20px; flex-wrap: wrap;">'
     
-    # 同率3位が複数いた場合でも全員漏れなくカード表示させる
     top_rows = agg[agg['順位'] <= 3]
     
     for i, row in top_rows.iterrows():
@@ -298,7 +305,6 @@ def render_section_ranking(full_agg, target_grades, section_title):
         st.info("集計データがありません。")
         return
     
-    # 同率順位の割り当て（1位、1位、3位...）
     section_df['順位'] = section_df['利用時間（時間）'].rank(method='min', ascending=False).astype(int)
     
     render_premium_cards(section_df)
