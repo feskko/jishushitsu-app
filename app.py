@@ -47,33 +47,35 @@ st.markdown("""
     div[data-baseweb="input"] > div, div[data-baseweb="select"] > div { background-color: #FFFFFF !important; border-radius: 8px !important; border: 1px solid #CBD5E1 !important; box-shadow: inset 0 1px 2px rgba(0,0,0,0.02); }
     div[data-baseweb="input"] input, div[data-baseweb="select"] div { color: #1E293B !important; font-weight: 700; font-size: 1.05rem; }
     
-    /* ======== 時間選択セルのデザイン（マトリクス風） ======== */
+    /* ボタンのデザイン */
     button[kind="secondary"] { background-color: #FFFFFF !important; color: #0A2B56 !important; border: 2px solid #E2E8F0 !important; font-weight: 700 !important; border-radius: 6px !important; transition: 0.2s !important; min-height: 2.8rem !important; padding: 2px !important; }
     button[kind="secondary"]:hover { border-color: #005BAB !important; background-color: #F8FAFC !important; }
     
     button[kind="primary"] { background: linear-gradient(135deg, #0A2B56 0%, #005BAB 100%) !important; color: #FFFFFF !important; border: none !important; font-weight: 800 !important; border-radius: 6px !important; box-shadow: 0 4px 6px -1px rgba(0, 91, 171, 0.3) !important; min-height: 2.8rem !important; padding: 2px !important; transition: all 0.2s ease; }
     button[kind="primary"]:active { transform: translateY(2px); }
     button p { font-size: 0.8rem !important; margin: 0 !important; line-height: 1.2 !important; }
-    
-    /* スマホ画面でセルを無理やり横並びのマトリクスにする魔法のCSS */
-    @media (max-width: 767px) { 
-        .main-title { font-size: 1.8rem; } .section-title { font-size: 1.3rem; } 
-        div[role="radiogroup"] { width: 100%; flex-wrap: wrap; } div[role="radiogroup"] label { min-width: 45%; } 
-        .rank-card { width: 100%; padding: 20px; border-radius: 12px; margin-bottom: 15px; border: 1px solid #E2E8F0; } 
-        div[data-baseweb="input"] > div, div[data-baseweb="select"] > div { height: 3.5rem; } 
-        
-        /* 列の自動折り返しを強制し、横並びをキープ */
-        div[data-testid="column"] { 
-            flex: 1 1 18% !important; 
-            min-width: 18% !important; 
-            padding: 0 2px !important;
-        }
+
+    /* ======== 横一列スクロールのCSS ======== */
+    div[data-testid="stHorizontalBlock"]:has(> div[data-testid="column"]:nth-child(30)) {
+        flex-wrap: nowrap !important;
+        overflow-x: auto !important;
+        padding-bottom: 15px;
+        scroll-behavior: smooth;
     }
+    div[data-testid="stHorizontalBlock"]:has(> div[data-testid="column"]:nth-child(30)) > div[data-testid="column"] {
+        min-width: 75px !important;
+        flex: 0 0 auto !important;
+        padding: 0 2px !important;
+    }
+    /* ======================================== */
+    
+    @media (min-width: 768px) { .main-title { font-size: 2.4rem; } .section-title { font-size: 1.6rem; } div[role="radiogroup"] { max-width: 600px; } .rank-card { flex: 1; min-width: 30%; padding: 25px; border-radius: 16px; border: 1px solid #E2E8F0; } div[data-baseweb="input"] > div, div[data-baseweb="select"] > div { height: 3.2rem; } }
+    @media (max-width: 767px) { .main-title { font-size: 1.8rem; } .section-title { font-size: 1.3rem; } div[role="radiogroup"] { width: 100%; flex-wrap: wrap; } div[role="radiogroup"] label { min-width: 45%; } .rank-card { width: 100%; padding: 20px; border-radius: 12px; margin-bottom: 15px; border: 1px solid #E2E8F0; } div[data-baseweb="input"] > div, div[data-baseweb="select"] > div { height: 3.5rem; } }
 </style>
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 🔒 セキュリティロック画面（白い枠バグを完全修正）
+# 🔒 セキュリティロック画面
 # ==========================================
 APP_PASSWORD = "tkg-1985" 
 
@@ -181,34 +183,28 @@ if menu == "📝 記録する":
     f_name = st.text_input("氏名", placeholder="山田太郎（※漢字フルネーム）", key=k_name)
 
     st.markdown("<div class='section-title'>⏰ 入退室時間を選択</div>", unsafe_allow_html=True)
-    st.markdown("<p style='font-size:0.9rem; color:#64748B;'>※下のセルをタップしてください。1回目で「入室」、2回目で「退室」を選択できます。</p>", unsafe_allow_html=True)
+    st.markdown("<p style='font-size:0.9rem; color:#64748B;'>※左右にスクロールできます。1回目で「入室」、2回目で「退室」を選択してください。</p>", unsafe_allow_html=True)
 
     val_in_disp = TIME_OPTIONS[st.session_state.start_idx][:5] if st.session_state.start_idx is not None else "--:--"
     val_out_disp = TIME_OPTIONS[st.session_state.end_idx][:5] if st.session_state.end_idx is not None else "--:--"
 
     st.markdown(f"<div style='background-color: #FFFFFF; padding: 15px; border-radius: 8px; color: #0A2B56; font-size: 1.5rem; text-align: center; margin-bottom: 20px; font-weight: 900; border: 2px dashed #005BAB;'>🕒 {val_in_disp} 〜 {val_out_disp}</div>", unsafe_allow_html=True)
 
-    # ＝＝＝＝ ここから：横並びマトリクス表示のロジック ＝＝＝＝
-    num_cols = 5 # 1行あたり5つの時間を表示（カレンダー風）
-    for row in range(0, len(TIME_OPTIONS), num_cols):
-        cols = st.columns(num_cols)
-        for col_idx in range(num_cols):
-            idx = row + col_idx
-            if idx < len(TIME_OPTIONS):
-                t = TIME_OPTIONS[idx]
+    # ＝＝＝＝ 横一列スクロール表示 ＝＝＝＝
+    cols = st.columns(len(TIME_OPTIONS))
+    for idx, t in enumerate(TIME_OPTIONS):
+        short_label = t.replace("コマ開始", "開").replace("コマ終了", "終")
+        
+        is_start = (idx == st.session_state.start_idx)
+        is_end = (idx == st.session_state.end_idx)
+        in_range = False
+        if st.session_state.start_idx is not None and st.session_state.end_idx is not None:
+            if st.session_state.start_idx <= idx <= st.session_state.end_idx:
+                in_range = True
                 
-                # ボタンの文字が枠に収まるように短く整形
-                short_label = t.replace("コマ開始", "開").replace("コマ終了", "終")
-                
-                is_start = (idx == st.session_state.start_idx)
-                is_end = (idx == st.session_state.end_idx)
-                in_range = False
-                if st.session_state.start_idx is not None and st.session_state.end_idx is not None:
-                    if st.session_state.start_idx <= idx <= st.session_state.end_idx: in_range = True
-                    
-                b_type = "primary" if (is_start or is_end or in_range) else "secondary"
-                
-                cols[col_idx].button(short_label, key=f"timebtn_{idx}_{st.session_state.form_key}", on_click=handle_time_click, args=(idx,), type=b_type, use_container_width=True)
+        b_type = "primary" if (is_start or is_end or in_range) else "secondary"
+        
+        cols[idx].button(short_label, key=f"timebtn_{idx}_{st.session_state.form_key}", on_click=handle_time_click, args=(idx,), type=b_type, use_container_width=True)
     # ＝＝＝＝ 終了 ＝＝＝＝
 
     st.markdown("<br>", unsafe_allow_html=True)
@@ -458,4 +454,4 @@ elif menu == "⚙️ 管理":
             st.markdown("</div>", unsafe_allow_html=True)
     else: st.info("変更・削除できるデータがありません。")
 
-st.markdown("<div style='text-align: center; font-size: 0.75rem; color: #94A3B8; margin-top: 60px;'>Tokyo Kobetsu Shido Gakuin<br>Responsive Matrix System v8.0</div>", unsafe_allow_html=True)
+st.markdown("<div style='text-align: center; font-size: 0.75rem; color: #94A3B8; margin-top: 60px;'>Tokyo Kobetsu Shido Gakuin<br>Horizontal Scroll System v9.0</div>", unsafe_allow_html=True)
