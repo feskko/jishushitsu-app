@@ -5,7 +5,6 @@ import gspread
 from google.oauth2.service_account import Credentials
 import json
 import os
-import re
 import base64
 import streamlit.components.v1 as components
 
@@ -15,7 +14,7 @@ jst_now = datetime.utcnow() + timedelta(hours=9)
 # --- 1. ページ構成（TKGブルーホライズン・コンセプト） ---
 st.set_page_config(page_title="TKG Study Room Analytics", page_icon="icon.png", layout="wide")
 
-# --- ホーム画面用アイコンの強制上書き処理 ---
+# 💡ホーム画面アイコン（Apple Touch Icon）を画像から自動生成
 if os.path.exists("icon.png"):
     with open("icon.png", "rb") as f:
         img_b64 = base64.b64encode(f.read()).decode()
@@ -178,19 +177,19 @@ def save_to_gs(df, sheet_name="メイン"):
 if "form_key" not in st.session_state:
     st.session_state.form_key = 0
 
-def auto_format_times():
-    for prefix in ["in_time", "out_time"]:
-        k = f"{prefix}_{st.session_state.form_key}"
-        val = st.session_state.get(k, "")
-        if not val or ":" in val: continue
-        clean = re.sub(r'[^0-9]', '', str(val))
-        if len(clean) == 3: clean = "0" + clean
-        if len(clean) == 4:
-            st.session_state[k] = f"{clean[:2]}:{clean[2:]}"
-
 def parse_final_time(t_str):
     try: return datetime.strptime(t_str, "%H:%M").time()
     except: return None
+
+# プルダウン用の時間選択肢を作成
+TIME_OPTIONS = [
+    "09:00", "09:30", "10:00", "10:30", "11:00", "11:30",
+    "12:00", "12:30", "13:00", "13:30", "14:00", "14:30", "15:00", "15:30",
+    "15:50 (5コマ)", "16:00", "16:30", "17:00", "17:10 (5コマ)",
+    "17:20 (6コマ)", "17:30", "18:00", "18:30", "18:40 (6コマ)",
+    "18:50 (7コマ)", "19:00", "19:30", "20:00", "20:10 (7コマ)",
+    "20:20 (8コマ)", "20:30", "21:00", "21:30", "21:40 (8コマ)", "22:00"
+]
 
 # --- 4. ユーザーインターフェース（サイドバー） ---
 with st.sidebar:
@@ -211,20 +210,19 @@ with st.sidebar:
     
     col_in, col_out = st.columns(2)
     with col_in:
-        st.text_input("入室", placeholder="19:00", key=k_in, on_change=auto_format_times)
+        val_in = st.selectbox("入室", TIME_OPTIONS, index=TIME_OPTIONS.index("17:20 (6コマ)"), key=k_in)
     with col_out:
-        st.text_input("退室", placeholder="21:30", key=k_out, on_change=auto_format_times)
+        val_out = st.selectbox("退室", TIME_OPTIONS, index=TIME_OPTIONS.index("21:40 (8コマ)"), key=k_out)
     
-    val_in = st.session_state.get(k_in, "")
-    val_out = st.session_state.get(k_out, "")
-    disp_in = val_in if val_in else "--:--"
-    disp_out = val_out if val_out else "--:--"
-    
-    st.markdown(f"<div style='background-color: rgba(255,255,255,0.1); padding: 8px; border-radius: 6px; color: #E2E8F0; font-size: 0.95rem; text-align: center; margin-top: -10px; margin-bottom: 20px; font-weight: bold;'>🕒 {disp_in} 〜 {disp_out}</div>", unsafe_allow_html=True)
+    st.markdown(f"<div style='background-color: rgba(255,255,255,0.1); padding: 8px; border-radius: 6px; color: #E2E8F0; font-size: 0.95rem; text-align: center; margin-top: -10px; margin-bottom: 20px; font-weight: bold;'>🕒 {val_in[:5]} 〜 {val_out[:5]}</div>", unsafe_allow_html=True)
     
     if st.button("記録を登録する", use_container_width=True):
-        t_start = parse_final_time(val_in)
-        t_end = parse_final_time(val_out)
+        # 先頭の5文字（HH:MM）だけを抽出して計算に使用する
+        t_start_str = val_in[:5]
+        t_end_str = val_out[:5]
+        
+        t_start = parse_final_time(t_start_str)
+        t_end = parse_final_time(t_end_str)
         f_name_clean = f_name.replace(" ", "").replace("　", "")
         
         if f_name_clean and t_start and t_end:
@@ -233,12 +231,13 @@ with st.sidebar:
             
             # 退室時刻が開始時刻より前、または同じ場合は保存しない
             if end_dt <= start_dt:
-                st.error("⚠️ 退室時刻は入室時刻より後の時間で入力してください")
+                st.error("⚠️ 退室時刻は入室時刻より後の時間を選択してください")
             else:
                 duration = round((end_dt - start_dt).total_seconds() / 3600, 2)
                 
                 df = load_data()
-                new_row = pd.DataFrame([{'日付': pd.to_datetime(f_date), '名前': f_name_clean, '学年': f_grade, '入室時間': val_in, '退室時間': val_out, '利用時間（時間）': duration}])
+                # スプレッドシートには「15:50」のように時間部分のみを保存
+                new_row = pd.DataFrame([{'日付': pd.to_datetime(f_date), '名前': f_name_clean, '学年': f_grade, '入室時間': t_start_str, '退室時間': t_end_str, '利用時間（時間）': duration}])
                 df = pd.concat([df, new_row], ignore_index=True)
                 save_to_gs(df)
                 
@@ -247,7 +246,7 @@ with st.sidebar:
                 st.cache_data.clear()
                 st.rerun()
         else:
-            st.error("入力内容に誤りがあります（氏名と時刻 1900 等を正しく入力してください）")
+            st.error("氏名を入力してください。")
 
     st.markdown("<hr style='border-color: rgba(255,255,255,0.2);'>", unsafe_allow_html=True)
     
@@ -273,7 +272,7 @@ with st.sidebar:
             else:
                 st.warning("記録を選択してください。")
     
-    st.markdown("<div style='text-align: center; font-size: 0.75rem; color: #94A3B8; margin-top: 40px;'>Tokyo Kobetsu Shido Gakuin<br>Study Room System v3.8</div>", unsafe_allow_html=True)
+    st.markdown("<div style='text-align: center; font-size: 0.75rem; color: #94A3B8; margin-top: 40px;'>Tokyo Kobetsu Shido Gakuin<br>Study Room System v4.0</div>", unsafe_allow_html=True)
 
 # --- 5. メインパネル（部門別ランキング） ---
 st.markdown("<div class='main-title'>STUDY HOURS RANKING</div>", unsafe_allow_html=True)
