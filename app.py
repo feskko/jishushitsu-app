@@ -78,7 +78,6 @@ st.markdown("""
     }
     
     /* ======== ボタンのスタイル分岐 ======== */
-    /* 1. 普段のボタン（グレー枠） */
     button[kind="secondary"] {
         background-color: #FFFFFF !important; color: #0A2B56 !important;
         border: 2px solid #E2E8F0 !important; font-weight: 700 !important;
@@ -89,7 +88,6 @@ st.markdown("""
         border-color: #005BAB !important; background-color: #F8FAFC !important;
     }
     
-    /* 2. 選択されたボタン（青グラデーション） */
     button[kind="primary"] {
         background: linear-gradient(135deg, #0A2B56 0%, #005BAB 100%) !important;
         color: #FFFFFF !important; border: none !important; font-weight: 800 !important;
@@ -98,7 +96,6 @@ st.markdown("""
     }
     button[kind="primary"]:active { transform: translateY(2px); }
 
-    /* 時間選択ボタンの文字サイズ調整（スマホで綺麗に収めるため） */
     button p { font-size: 0.85rem !important; margin: 0 !important; }
     
     /* ======== レスポンシブ調整 ======== */
@@ -155,7 +152,6 @@ def save_to_gs(df, sheet_name="メイン"):
 
 # --- 3. セッション管理と時刻処理 ---
 if "form_key" not in st.session_state: st.session_state.form_key = 0
-# 時間選択用のセッションステート
 if "start_idx" not in st.session_state: st.session_state.start_idx = None
 if "end_idx" not in st.session_state: st.session_state.end_idx = None
 
@@ -163,7 +159,6 @@ def parse_final_time(t_str):
     try: return datetime.strptime(t_str, "%H:%M").time()
     except: return None
 
-# 1回タップで開始、2回タップで終了をセットするロジック
 def handle_time_click(idx):
     if st.session_state.start_idx is None:
         st.session_state.start_idx = idx
@@ -172,9 +167,9 @@ def handle_time_click(idx):
         if idx > st.session_state.start_idx:
             st.session_state.end_idx = idx
         elif idx < st.session_state.start_idx:
-            st.session_state.start_idx = idx # 前の時間を押したら開始を上書き
+            st.session_state.start_idx = idx 
         else:
-            st.session_state.start_idx = None # 同じ時間を押したら解除
+            st.session_state.start_idx = None 
     else:
         st.session_state.start_idx = idx
         st.session_state.end_idx = None
@@ -192,16 +187,22 @@ TIME_OPTIONS = [
     "20:20 (8コマ)", "20:30", "21:00", "21:30", "21:40 (8コマ)", "22:00"
 ]
 
+# 既存の文字列から TIME_OPTIONS のインデックスを探す関数（管理画面用）
+def get_time_index(t_str, default_idx=0):
+    for i, opt in enumerate(TIME_OPTIONS):
+        if opt.startswith(str(t_str)):
+            return i
+    return default_idx
+
 # --- 4. メインUI構築 ---
 menu = st.radio("メニュー", ["📝 記録する", "🏆 ランキング", "⚙️ 管理"], horizontal=True, label_visibility="collapsed")
 
 # ---------------------------------------------------------
-# 【モード1】📝 記録・入力画面（メイン画面に広く表示）
+# 【モード1】📝 記録・入力画面
 # ---------------------------------------------------------
 if menu == "📝 記録する":
     st.markdown("<div class='main-title'>ENTRY PANEL</div>", unsafe_allow_html=True)
     
-    # ユーザー情報入力エリア
     col1, col2 = st.columns([1, 1])
     with col1: f_date = st.date_input("利用日", jst_now.date(), max_value=jst_now.date())
     with col2: 
@@ -211,7 +212,6 @@ if menu == "📝 記録する":
     k_name = f"name_{st.session_state.form_key}"
     f_name = st.text_input("氏名", placeholder="山田太郎（スペース不要）", key=k_name)
 
-    # 時間選択エリア（ボタン式）
     st.markdown("<div class='section-title'>⏰ 入退室時間を選択</div>", unsafe_allow_html=True)
     st.markdown("<p style='font-size:0.9rem; color:#64748B;'>※下のセルをタップしてください。1回目で「入室」、2回目で「退室」を選択できます。</p>", unsafe_allow_html=True)
 
@@ -230,11 +230,9 @@ if menu == "📝 記録する":
 
     st.markdown("<br>", unsafe_allow_html=True)
 
-    # 3列でボタンを綺麗に並べる
     cols = st.columns(3)
     for i, t in enumerate(TIME_OPTIONS):
         col = cols[i % 3]
-        
         is_start = (i == st.session_state.start_idx)
         is_end = (i == st.session_state.end_idx)
         in_range = False
@@ -242,10 +240,7 @@ if menu == "📝 記録する":
             if st.session_state.start_idx <= i <= st.session_state.end_idx:
                 in_range = True
                 
-        # 選択中のボタンは primary（青色）に変化する
         b_type = "primary" if (is_start or is_end or in_range) else "secondary"
-        
-        # 分かりやすいように入/退のラベルをつける
         label = t
         if is_start: label = "入: " + t
         elif is_end: label = "退: " + t
@@ -254,7 +249,6 @@ if menu == "📝 記録する":
 
     st.markdown("<hr style='margin-top:30px; margin-bottom:30px;'>", unsafe_allow_html=True)
 
-    # 登録処理
     if st.button("💾 記録を登録する", use_container_width=True, type="primary"):
         f_name_clean = f_name.replace(" ", "").replace("　", "")
         
@@ -280,7 +274,6 @@ if menu == "📝 記録する":
                 df = pd.concat([df, new_row], ignore_index=True)
                 save_to_gs(df)
                 
-                # 入力状態をすべてリセット
                 st.session_state.form_key += 1 
                 reset_time_selection()
                 st.success(f"✓ {f_name_clean}さんの記録を保存しました。")
@@ -347,28 +340,99 @@ elif menu == "🏆 ランキング":
     else: st.info("データがありません。最初の記録を登録してください。")
 
 # ---------------------------------------------------------
-# 【モード3】⚙️ 管理画面（削除機能）
+# 【モード3】⚙️ 管理画面（変更・削除機能）
 # ---------------------------------------------------------
 elif menu == "⚙️ 管理":
     st.markdown("<div class='main-title'>ADMIN PANEL</div>", unsafe_allow_html=True)
-    st.markdown("#### 🗑️ 直近の記録を取り消す")
-    df_for_delete = load_data()
-    if not df_for_delete.empty:
-        options = [("-1", "-- 削除する記録を選択してください --")]
-        for i in reversed(df_for_delete.index[-30:]):
-            row = df_for_delete.loc[i]
+    st.markdown("#### ✏️ 直近の記録の変更・削除")
+    
+    df_manage = load_data()
+    if not df_manage.empty:
+        options = [("-1", "-- 編集・削除する記録を選択してください --")]
+        for i in reversed(df_manage.index[-30:]):
+            row = df_manage.loc[i]
             d_str = row['日付'].strftime('%m/%d') if pd.notnull(row['日付']) else "不明"
-            options.append((str(i), f"{d_str} | {row['名前']} ({row['入室時間']}-{row['退室時間']})"))
+            options.append((str(i), f"{d_str} | {row['名前']} ({row['入室時間']} - {row['退室時間']})"))
         
-        selected_del = st.selectbox("削除対象", options, format_func=lambda x: x[1], label_visibility="collapsed")
-        if st.button("🚨 データを削除する", use_container_width=True, type="primary"):
-            if selected_del[0] != "-1":
-                df_for_delete = df_for_delete.drop(int(selected_del[0])).reset_index(drop=True)
-                save_to_gs(df_for_delete)
-                st.success("削除しました。")
-                st.cache_data.clear()
-                st.rerun()
-            else: st.warning("記録を選択してください。")
-    else: st.info("削除できるデータがありません。")
+        selected_mng = st.selectbox("対象記録", options, format_func=lambda x: x[1], label_visibility="collapsed")
+        
+        if selected_mng[0] != "-1":
+            target_idx = int(selected_mng[0])
+            target_row = df_manage.loc[target_idx]
+            
+            st.markdown("<div style='margin-top: 20px; padding: 20px; border-radius: 12px; background-color: #FFFFFF; border: 1px solid #CBD5E1;'>", unsafe_allow_html=True)
+            st.markdown("##### 📝 記録の編集", unsafe_allow_html=True)
+            
+            # 日付の読み込み
+            default_date = target_row['日付'].date() if pd.notnull(target_row['日付']) else jst_now.date()
+            edit_date = st.date_input("利用日", default_date)
+            
+            # 名前と学年の読み込み
+            col_n, col_g = st.columns(2)
+            with col_n:
+                edit_name = st.text_input("氏名", value=str(target_row['名前']))
+            with col_g:
+                grades = [f"小{i}" for i in range(1, 7)] + [f"中{i}" for i in range(1, 4)] + [f"高{i}" for i in range(1, 4)] + ["既卒/その他"]
+                current_grade = str(target_row['学年'])
+                g_index = grades.index(current_grade) if current_grade in grades else 0
+                edit_grade = st.selectbox("学年", grades, index=g_index)
+                
+            # 時間の読み込み
+            col_in, col_out = st.columns(2)
+            in_idx = get_time_index(target_row['入室時間'], 0)
+            out_idx = get_time_index(target_row['退室時間'], 0)
+            
+            with col_in:
+                edit_in = st.selectbox("入室時間", TIME_OPTIONS, index=in_idx)
+            with col_out:
+                edit_out = st.selectbox("退室時間", TIME_OPTIONS, index=out_idx)
+            
+            st.markdown("<br>", unsafe_allow_html=True)
+            
+            # 更新・削除ボタン
+            col_btn1, col_btn2 = st.columns(2)
+            with col_btn1:
+                if st.button("🔄 この内容で上書き保存", use_container_width=True, type="primary"):
+                    t_start_str = edit_in[:5]
+                    t_end_str = edit_out[:5]
+                    t_start = parse_final_time(t_start_str)
+                    t_end = parse_final_time(t_end_str)
+                    edit_name_clean = edit_name.replace(" ", "").replace("　", "")
+                    
+                    if edit_name_clean and t_start and t_end:
+                        start_dt = datetime.combine(edit_date, t_start)
+                        end_dt = datetime.combine(edit_date, t_end)
+                        
+                        if end_dt <= start_dt:
+                            st.error("⚠️ 退室時刻は入室時刻より後の時間を選択してください")
+                        else:
+                            duration = round((end_dt - start_dt).total_seconds() / 3600, 2)
+                            
+                            # データの更新
+                            df_manage.at[target_idx, '日付'] = pd.to_datetime(edit_date)
+                            df_manage.at[target_idx, '名前'] = edit_name_clean
+                            df_manage.at[target_idx, '学年'] = edit_grade
+                            df_manage.at[target_idx, '入室時間'] = t_start_str
+                            df_manage.at[target_idx, '退室時間'] = t_end_str
+                            df_manage.at[target_idx, '利用時間（時間）'] = duration
+                            
+                            save_to_gs(df_manage)
+                            st.success("✅ 記録を更新しました。")
+                            st.cache_data.clear()
+                            st.rerun()
+                    else:
+                        st.error("入力内容に誤りがあります。")
+                        
+            with col_btn2:
+                if st.button("🚨 この記録を完全に削除", use_container_width=True):
+                    df_manage = df_manage.drop(target_idx).reset_index(drop=True)
+                    save_to_gs(df_manage)
+                    st.success("🗑️ 削除しました。")
+                    st.cache_data.clear()
+                    st.rerun()
+                    
+            st.markdown("</div>", unsafe_allow_html=True)
+    else: 
+        st.info("変更・削除できるデータがありません。")
 
-st.markdown("<div style='text-align: center; font-size: 0.75rem; color: #94A3B8; margin-top: 60px;'>Tokyo Kobetsu Shido Gakuin<br>Responsive System v5.0</div>", unsafe_allow_html=True)
+st.markdown("<div style='text-align: center; font-size: 0.75rem; color: #94A3B8; margin-top: 60px;'>Tokyo Kobetsu Shido Gakuin<br>Responsive System v5.1</div>", unsafe_allow_html=True)
