@@ -68,8 +68,7 @@ if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
 
 if not st.session_state.authenticated:
-    st.markdown("<div style='max-width: 400px; margin: 10vh auto; padding: 30px; background: white; border-radius: 12px; border: 1px solid #CBD5E1; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1);'>", unsafe_allow_html=True)
-    st.markdown("<h3 style='text-align: center; color: #0A2B56; margin-bottom: 20px;'>🔒 Study Room System</h3>", unsafe_allow_html=True)
+    st.markdown("<h3 style='text-align: center; color: #0A2B56; margin-top: 15vh; margin-bottom: 20px;'>🔒 Study Room System</h3>", unsafe_allow_html=True)
     
     pwd = st.text_input("パスワード（合言葉）", type="password", placeholder="****")
     if st.button("ロック解除", type="primary", use_container_width=True):
@@ -78,8 +77,9 @@ if not st.session_state.authenticated:
             st.rerun()
         else:
             st.error("パスワードが違います")
-    st.markdown("</div>", unsafe_allow_html=True)
+            
     st.stop()
+
 
 # --- 2. バックエンド設定 ---
 scopes = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
