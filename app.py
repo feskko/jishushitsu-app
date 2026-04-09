@@ -178,13 +178,14 @@ def reset_time_selection():
     st.session_state.start_idx = None
     st.session_state.end_idx = None
 
+# 開始・終了の文字を追加したリストに変更
 TIME_OPTIONS = [
     "09:00", "09:30", "10:00", "10:30", "11:00", "11:30",
     "12:00", "12:30", "13:00", "13:30", "14:00", "14:30", "15:00", "15:30",
-    "15:50 (5コマ)", "16:00", "16:30", "17:00", "17:10 (5コマ)",
-    "17:20 (6コマ)", "17:30", "18:00", "18:30", "18:40 (6コマ)",
-    "18:50 (7コマ)", "19:00", "19:30", "20:00", "20:10 (7コマ)",
-    "20:20 (8コマ)", "20:30", "21:00", "21:30", "21:40 (8コマ)", "22:00"
+    "15:50 (5コマ開始)", "16:00", "16:30", "17:00", "17:10 (5コマ終了)",
+    "17:20 (6コマ開始)", "17:30", "18:00", "18:30", "18:40 (6コマ終了)",
+    "18:50 (7コマ開始)", "19:00", "19:30", "20:00", "20:10 (7コマ終了)",
+    "20:20 (8コマ開始)", "20:30", "21:00", "21:30", "21:40 (8コマ終了)", "22:00"
 ]
 
 # 既存の文字列から TIME_OPTIONS のインデックスを探す関数（管理画面用）
@@ -435,4 +436,4 @@ elif menu == "⚙️ 管理":
     else: 
         st.info("変更・削除できるデータがありません。")
 
-st.markdown("<div style='text-align: center; font-size: 0.75rem; color: #94A3B8; margin-top: 60px;'>Tokyo Kobetsu Shido Gakuin<br>Responsive System v5.1</div>", unsafe_allow_html=True)
+st.markdown("<div style='text-align: center; font-size: 0.75rem; color: #94A3B8; margin-top: 60px;'>Tokyo Kobetsu Shido Gakuin<br>Responsive System v5.2</div>", unsafe_allow_html=True)
