@@ -54,8 +54,8 @@ st.markdown("""
     button[kind="primary"]:active { transform: translateY(2px); }
     button p { font-size: 0.85rem !important; margin: 0 !important; }
     
-    @media (min-width: 768px) { .main-title { font-size: 2.4rem; } .section-title { font-size: 1.6rem; } div[role="radiogroup"] { max-width: 500px; } .rank-card { flex: 1; min-width: 30%; padding: 25px; border-radius: 16px; border: 1px solid #E2E8F0; } div[data-baseweb="input"] > div, div[data-baseweb="select"] > div { height: 3.2rem; } }
-    @media (max-width: 767px) { .main-title { font-size: 1.8rem; } .section-title { font-size: 1.3rem; } div[role="radiogroup"] { width: 100%; } .rank-card { width: 100%; padding: 20px; border-radius: 12px; margin-bottom: 15px; border: 1px solid #E2E8F0; } div[data-baseweb="input"] > div, div[data-baseweb="select"] > div { height: 3.5rem; } }
+    @media (min-width: 768px) { .main-title { font-size: 2.4rem; } .section-title { font-size: 1.6rem; } div[role="radiogroup"] { max-width: 600px; } .rank-card { flex: 1; min-width: 30%; padding: 25px; border-radius: 16px; border: 1px solid #E2E8F0; } div[data-baseweb="input"] > div, div[data-baseweb="select"] > div { height: 3.2rem; } }
+    @media (max-width: 767px) { .main-title { font-size: 1.8rem; } .section-title { font-size: 1.3rem; } div[role="radiogroup"] { width: 100%; flex-wrap: wrap; } div[role="radiogroup"] label { min-width: 45%; } .rank-card { width: 100%; padding: 20px; border-radius: 12px; margin-bottom: 15px; border: 1px solid #E2E8F0; } div[data-baseweb="input"] > div, div[data-baseweb="select"] > div { height: 3.5rem; } }
 </style>
 """, unsafe_allow_html=True)
 
@@ -156,7 +156,7 @@ def get_time_index(t_str, default_idx=0):
     return default_idx
 
 # --- 4. メインUI構築 ---
-menu = st.radio("メニュー", ["📝 記録する", "🏆 ランキング", "⚙️ 管理"], horizontal=True, label_visibility="collapsed")
+menu = st.radio("メニュー", ["📝 記録する", "🏆 ランキング", "📊 分析", "⚙️ 管理"], horizontal=True, label_visibility="collapsed")
 
 if menu == "📝 記録する":
     st.markdown("<div class='main-title'>ENTRY PANEL</div>", unsafe_allow_html=True)
@@ -271,6 +271,102 @@ elif menu == "🏆 ランキング":
                     render_section_ranking(agg_data, [f"高{i}" for i in range(1, 4)] + ["既卒/その他"], "高校生・その他")
     else: st.info("データがありません。最初の記録を登録してください。")
 
+# ---------------------------------------------------------
+# 【モード3】📊 分析画面（ヒートマップ・個人ダッシュボード）
+# ---------------------------------------------------------
+elif menu == "📊 分析":
+    st.markdown("<div class='main-title'>ANALYTICS DASHBOARD</div>", unsafe_allow_html=True)
+    tab1, tab2 = st.tabs(["🔥 混雑状況ヒートマップ", "👤 生徒個別ダッシュボード"])
+    
+    df_ana = load_data()
+
+    with tab1:
+        st.markdown("<div class='section-title'>曜日・時間帯別の混雑状況</div>", unsafe_allow_html=True)
+        st.markdown("<p style='color:#475569; font-size:0.95rem;'>過去の入退室記録をもとに、どの曜日のどの時間帯が混みやすいかを可視化しています。色が濃いほど利用者が多い時間帯です。</p>", unsafe_allow_html=True)
+        
+        if not df_ana.empty:
+            time_bins = ["15:00", "15:30", "16:00", "16:30", "17:00", "17:30", "18:00", "18:30", "19:00", "19:30", "20:00", "20:30", "21:00", "21:30"]
+            weekdays = ["月", "火", "水", "木", "金", "土", "日"]
+            heatmap_data = pd.DataFrame(0, index=weekdays, columns=time_bins)
+
+            for _, row in df_ana.iterrows():
+                if pd.isnull(row['日付']) or not row['入室時間'] or not row['退室時間']: continue
+                try:
+                    dt = pd.to_datetime(row['日付'])
+                    wd = weekdays[dt.weekday()]
+                    in_t = row['入室時間'][:5]
+                    out_t = row['退室時間'][:5]
+                    for tb in time_bins:
+                        if in_t <= tb < out_t:
+                            heatmap_data.loc[wd, tb] += 1
+                except: continue
+
+            max_val = heatmap_data.values.max()
+            max_val = max(max_val, 1)
+
+            # HTMLでヒートマップを描画（ライブラリ不要の独自実装）
+            html = "<div style='overflow-x: auto;'><table style='width:100%; border-collapse: collapse; margin-bottom: 20px; min-width: 800px;'>"
+            html += "<tr><th style='border: 1px solid #CBD5E1; padding: 8px; background-color: #F8FAFC; color: #0A2B56; position: sticky; left: 0; z-index: 1;'>曜日</th>"
+            for tb in time_bins:
+                html += f"<th style='border: 1px solid #CBD5E1; padding: 8px; background-color: #F8FAFC; color: #0A2B56; font-size:0.8rem;'>{tb}</th>"
+            html += "</tr>"
+
+            for wd in weekdays:
+                html += f"<tr><th style='border: 1px solid #CBD5E1; padding: 8px; background-color: #F8FAFC; color: #0A2B56; position: sticky; left: 0; z-index: 1;'>{wd}</th>"
+                for tb in time_bins:
+                    val = heatmap_data.loc[wd, tb]
+                    ratio = val / max_val
+                    bg_color = f"rgba(0, 91, 171, {ratio * 0.8})" if val > 0 else "transparent"
+                    font_color = "white" if ratio > 0.5 else "#1E293B"
+                    html += f"<td style='border: 1px solid #CBD5E1; padding: 8px; text-align: center; font-weight: bold; background-color: {bg_color}; color: {font_color};'>{val}</td>"
+                html += "</tr>"
+            html += "</table></div>"
+            st.markdown(html, unsafe_allow_html=True)
+        else:
+            st.info("集計するデータがありません。")
+
+    with tab2:
+        st.markdown("<div class='section-title'>生徒個別 学習時間データ</div>", unsafe_allow_html=True)
+        if not df_ana.empty:
+            unique_names = df_ana['名前'].dropna().unique().tolist()
+            unique_names = [n for n in unique_names if str(n).strip() != ""]
+
+            if unique_names:
+                selected_name = st.selectbox("生徒名で検索", ["-- 選択してください --"] + unique_names)
+
+                if selected_name != "-- 選択してください --":
+                    student_df = df_ana[df_ana['名前'] == selected_name].copy()
+                    student_df['日付'] = pd.to_datetime(student_df['日付'])
+
+                    this_month = pd.Timestamp(jst_now.date()).replace(day=1)
+                    sm_df = student_df[student_df['日付'] >= this_month]
+                    total_h = sm_df['利用時間（時間）'].sum()
+
+                    st.markdown(f"""
+                    <div style='background: linear-gradient(135deg, #0A2B56 0%, #005BAB 100%); padding: 20px; border-radius: 12px; color: white; margin-bottom: 20px; box-shadow: 0 4px 6px -1px rgba(0, 91, 171, 0.3);'>
+                        <h4 style='margin:0; font-size: 1.1rem; font-weight: normal;'>{selected_name} さんの今月の学習時間</h4>
+                        <div style='font-size: 2.8rem; font-weight: 900; margin-top: 5px;'>{total_h:.2f} <span style='font-size: 1.2rem; font-weight: bold;'>時間</span></div>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+                    st.markdown("##### 📈 日別の学習推移（今月）")
+                    if not sm_df.empty:
+                        daily_sum = sm_df.groupby('日付')['利用時間（時間）'].sum().reset_index()
+                        daily_sum['日付ラベル'] = daily_sum['日付'].dt.strftime('%m/%d')
+                        chart_data = daily_sum.set_index('日付ラベル')['利用時間（時間）']
+                        st.bar_chart(chart_data)
+                    else:
+                        st.info("今月の記録はまだありません。")
+
+                    st.markdown("##### 📝 直近の記録一覧")
+                    display_history = student_df.sort_values('日付', ascending=False).head(10)
+                    display_history['日付'] = display_history['日付'].dt.strftime('%Y/%m/%d')
+                    st.dataframe(display_history[['日付', '入室時間', '退室時間', '利用時間（時間）']], use_container_width=True, hide_index=True)
+            else:
+                st.info("検索できる生徒データがありません。")
+        else:
+            st.info("集計するデータがありません。")
+
 elif menu == "⚙️ 管理":
     st.markdown("<div class='main-title'>ADMIN PANEL</div>", unsafe_allow_html=True)
     st.markdown("#### ✏️ 直近の記録の変更・削除")
@@ -347,4 +443,4 @@ elif menu == "⚙️ 管理":
             st.markdown("</div>", unsafe_allow_html=True)
     else: st.info("変更・削除できるデータがありません。")
 
-st.markdown("<div style='text-align: center; font-size: 0.75rem; color: #94A3B8; margin-top: 60px;'>Tokyo Kobetsu Shido Gakuin<br>Responsive System v6.1</div>", unsafe_allow_html=True)
+st.markdown("<div style='text-align: center; font-size: 0.75rem; color: #94A3B8; margin-top: 60px;'>Tokyo Kobetsu Shido Gakuin<br>Responsive System v7.0</div>", unsafe_allow_html=True)
