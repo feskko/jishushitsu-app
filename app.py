@@ -62,7 +62,7 @@ st.markdown("""
 # ==========================================
 # 🔒 セキュリティロック画面
 # ==========================================
-APP_PASSWORD = "0000" 
+APP_PASSWORD = "tkg-1985" 
 
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
@@ -271,9 +271,6 @@ elif menu == "🏆 ランキング":
                     render_section_ranking(agg_data, [f"高{i}" for i in range(1, 4)] + ["既卒/その他"], "高校生・その他")
     else: st.info("データがありません。最初の記録を登録してください。")
 
-# ---------------------------------------------------------
-# 【モード3】📊 分析画面（ヒートマップ・個人ダッシュボード）
-# ---------------------------------------------------------
 elif menu == "📊 分析":
     st.markdown("<div class='main-title'>ANALYTICS DASHBOARD</div>", unsafe_allow_html=True)
     tab1, tab2 = st.tabs(["🔥 混雑状況ヒートマップ", "👤 生徒個別ダッシュボード"])
@@ -304,7 +301,6 @@ elif menu == "📊 分析":
             max_val = heatmap_data.values.max()
             max_val = max(max_val, 1)
 
-            # HTMLでヒートマップを描画（ライブラリ不要の独自実装）
             html = "<div style='overflow-x: auto;'><table style='width:100%; border-collapse: collapse; margin-bottom: 20px; min-width: 800px;'>"
             html += "<tr><th style='border: 1px solid #CBD5E1; padding: 8px; background-color: #F8FAFC; color: #0A2B56; position: sticky; left: 0; z-index: 1;'>曜日</th>"
             for tb in time_bins:
@@ -443,4 +439,4 @@ elif menu == "⚙️ 管理":
             st.markdown("</div>", unsafe_allow_html=True)
     else: st.info("変更・削除できるデータがありません。")
 
-st.markdown("<div style='text-align: center; font-size: 0.75rem; color: #94A3B8; margin-top: 60px;'>Tokyo Kobetsu Shido Gakuin<br>Responsive System v7.0</div>", unsafe_allow_html=True)
+st.markdown("<div style='text-align: center; font-size: 0.75rem; color: #94A3B8; margin-top: 60px;'>Tokyo Kobetsu Shido Gakuin<br>Responsive System v7.1</div>", unsafe_allow_html=True)
