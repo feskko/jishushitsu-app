@@ -42,20 +42,20 @@ st.markdown("""
     div[role="radiogroup"] label { flex: 1; text-align: center; justify-content: center; padding: 10px 5px !important; margin: 0 !important; border-radius: 8px; transition: 0.2s; cursor: pointer; }
     div[role="radiogroup"] label[data-checked="true"] { background-color: #0A2B56; }
     div[role="radiogroup"] label[data-checked="true"] p { color: #FFFFFF !important; font-weight: 800; }
-    div[role="radiogroup"] label p { color: #64748B; font-weight: 700; font-size: 0.95rem; }
+    div[role="radiogroup"] label p { color: #64748B; font-weight: 700; font-size: 0.85rem; }
 
     div[data-baseweb="input"] > div, div[data-baseweb="select"] > div { background-color: #FFFFFF !important; border-radius: 8px !important; border: 1px solid #CBD5E1 !important; box-shadow: inset 0 1px 2px rgba(0,0,0,0.02); }
     div[data-baseweb="input"] input, div[data-baseweb="select"] div { color: #1E293B !important; font-weight: 700; font-size: 1.05rem; }
     
-    button[kind="secondary"] { background-color: #FFFFFF !important; color: #0A2B56 !important; border: 2px solid #E2E8F0 !important; font-weight: 700 !important; border-radius: 8px !important; transition: 0.2s !important; min-height: 3rem !important; padding: 5px !important; }
+    button[kind="secondary"] { background-color: #FFFFFF !important; color: #0A2B56 !important; border: 2px solid #E2E8F0 !important; font-weight: 700 !important; border-radius: 6px !important; transition: 0.2s !important; min-height: 2.8rem !important; padding: 2px !important; }
     button[kind="secondary"]:hover { border-color: #005BAB !important; background-color: #F8FAFC !important; }
     
-    button[kind="primary"] { background: linear-gradient(135deg, #0A2B56 0%, #005BAB 100%) !important; color: #FFFFFF !important; border: none !important; font-weight: 800 !important; border-radius: 8px !important; box-shadow: 0 4px 6px -1px rgba(0, 91, 171, 0.3) !important; min-height: 3rem !important; padding: 5px !important; transition: all 0.2s ease; }
+    button[kind="primary"] { background: linear-gradient(135deg, #0A2B56 0%, #005BAB 100%) !important; color: #FFFFFF !important; border: none !important; font-weight: 800 !important; border-radius: 6px !important; box-shadow: 0 4px 6px -1px rgba(0, 91, 171, 0.3) !important; min-height: 2.8rem !important; padding: 2px !important; transition: all 0.2s ease; }
     button[kind="primary"]:active { transform: translateY(2px); }
-    button p { font-size: 0.85rem !important; margin: 0 !important; }
     
-    @media (min-width: 768px) { .main-title { font-size: 2.4rem; } .section-title { font-size: 1.6rem; } div[role="radiogroup"] { max-width: 600px; } .rank-card { flex: 1; min-width: 30%; padding: 25px; border-radius: 16px; border: 1px solid #E2E8F0; } div[data-baseweb="input"] > div, div[data-baseweb="select"] > div { height: 3.2rem; } }
-    @media (max-width: 767px) { .main-title { font-size: 1.8rem; } .section-title { font-size: 1.3rem; } div[role="radiogroup"] { width: 100%; flex-wrap: wrap; } div[role="radiogroup"] label { min-width: 45%; } .rank-card { width: 100%; padding: 20px; border-radius: 12px; margin-bottom: 15px; border: 1px solid #E2E8F0; } div[data-baseweb="input"] > div, div[data-baseweb="select"] > div { height: 3.5rem; } }
+    @media (max-width: 767px) { 
+        div[role="radiogroup"] { width: 100%; flex-wrap: wrap; } div[role="radiogroup"] label { min-width: 30%; } 
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -68,16 +68,15 @@ if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
 
 if not st.session_state.authenticated:
-    st.markdown("<h3 style='text-align: center; color: #0A2B56; margin-top: 15vh; margin-bottom: 20px;'>🔒 Study Room System</h3>", unsafe_allow_html=True)
+    st.markdown("<h3 style='text-align: center; color: #0A2B56; margin-top: 15vh; margin-bottom: 20px; font-weight: 900; font-size: 2rem;'>🔒 Study Room System</h3>", unsafe_allow_html=True)
     
     pwd = st.text_input("パスワード（合言葉）", type="password", placeholder="****")
-    if st.button("ロック解除", type="primary", use_container_width=True):
+    if st.button("🔓 ロック解除", type="primary", use_container_width=True):
         if pwd == APP_PASSWORD:
             st.session_state.authenticated = True
             st.rerun()
         else:
-            st.error("パスワードが違います")
-            
+            st.error("⚠️ パスワードが違います")
     st.stop()
 
 # --- 2. バックエンド設定 ---
@@ -116,6 +115,7 @@ def save_to_gs(df, sheet_name="メイン"):
     else:
         worksheet.update(range_name="A1", values=[['日付', '名前', '学年', '入室時間', '退室時間', '利用時間（時間）']])
 
+# 変数準備
 if "form_key" not in st.session_state: st.session_state.form_key = 0
 if "start_idx" not in st.session_state: st.session_state.start_idx = None
 if "end_idx" not in st.session_state: st.session_state.end_idx = None
@@ -123,22 +123,6 @@ if "end_idx" not in st.session_state: st.session_state.end_idx = None
 def parse_final_time(t_str):
     try: return datetime.strptime(t_str, "%H:%M").time()
     except: return None
-
-def handle_time_click(idx):
-    if st.session_state.start_idx is None:
-        st.session_state.start_idx = idx
-        st.session_state.end_idx = None
-    elif st.session_state.end_idx is None:
-        if idx > st.session_state.start_idx: st.session_state.end_idx = idx
-        elif idx < st.session_state.start_idx: st.session_state.start_idx = idx 
-        else: st.session_state.start_idx = None 
-    else:
-        st.session_state.start_idx = idx
-        st.session_state.end_idx = None
-
-def reset_time_selection():
-    st.session_state.start_idx = None
-    st.session_state.end_idx = None
 
 TIME_OPTIONS = [
     "09:00", "09:30", "10:00", "10:30", "11:00", "11:30",
@@ -148,28 +132,112 @@ TIME_OPTIONS = [
     "18:50 (7コマ開始)", "19:00", "19:30", "20:00", "20:10 (7コマ終了)",
     "20:20 (8コマ開始)", "20:30", "21:00", "21:30", "21:40 (8コマ終了)", "22:00"
 ]
-
-def get_time_index(t_str, default_idx=0):
-    for i, opt in enumerate(TIME_OPTIONS):
-        if opt.startswith(str(t_str)): return i
-    return default_idx
+GRADES = [f"小{i}" for i in range(1, 7)] + [f"中{i}" for i in range(1, 4)] + [f"高{i}" for i in range(1, 4)] + ["既卒/その他"]
 
 # --- 4. メインUI構築 ---
-menu = st.radio("メニュー", ["📝 記録する", "🏆 ランキング", "📊 分析", "⚙️ 管理"], horizontal=True, label_visibility="collapsed")
+menu = st.radio("メニュー", ["⚡ 一括入力", "📝 1件ずつ", "🏆 ランキング", "📊 分析", "⚙️ 管理"], horizontal=True, label_visibility="collapsed")
 
-if menu == "📝 記録する":
-    st.markdown("<div class='main-title'>ENTRY PANEL</div>", unsafe_allow_html=True)
+# ---------------------------------------------------------
+# 【モード0】⚡ エクセル風 一括入力（NEW）
+# ---------------------------------------------------------
+if menu == "⚡ 一括入力":
+    st.markdown("<div class='main-title'>BATCH ENTRY PANEL</div>", unsafe_allow_html=True)
+    st.markdown("<p style='color:#475569; font-size:0.95rem;'>紙のリストを見ながら、Excelのように一気に入力できます。（PC推奨）<br>氏名を入力し、Tabキーで隣のセルに移動できます。</p>", unsafe_allow_html=True)
+    
+    f_date_batch = st.date_input("利用日 (全員共通)", jst_now.date(), max_value=jst_now.date())
+    
+    # 25行分の空データを作成
+    if "batch_data" not in st.session_state:
+        st.session_state.batch_data = [{"氏名": "", "学年": "高1", "入室": "17:20 (6コマ開始)", "退室": "21:40 (8コマ終了)"} for _ in range(25)]
+        
+    df_empty = pd.DataFrame(st.session_state.batch_data)
+    
+    # データエディタの表示
+    edited_df = st.data_editor(
+        df_empty,
+        column_config={
+            "氏名": st.column_config.TextColumn("氏名 (フルネームで入力)", width="medium"),
+            "学年": st.column_config.SelectboxColumn("学年", options=GRADES, width="small"),
+            "入室": st.column_config.SelectboxColumn("入室", options=TIME_OPTIONS, width="medium"),
+            "退室": st.column_config.SelectboxColumn("退室", options=TIME_OPTIONS, width="medium"),
+        },
+        num_rows="dynamic",
+        use_container_width=True,
+        height=500
+    )
+    
+    if st.button("💾 表のデータをすべて一括保存する", type="primary", use_container_width=True):
+        # 氏名が空欄の行を除外
+        valid_rows = edited_df[edited_df["氏名"].str.strip() != ""]
+        
+        if valid_rows.empty:
+            st.error("⚠️ 氏名が入力されている行がありません。")
+        else:
+            new_records = []
+            error_msgs = []
+            
+            for idx, row in valid_rows.iterrows():
+                name = row["氏名"].replace(" ", "").replace("　", "")
+                in_str = row["入室"][:5]
+                out_str = row["退室"][:5]
+                t_in = parse_final_time(in_str)
+                t_out = parse_final_time(out_str)
+                
+                if t_in and t_out and t_out > t_in:
+                    duration = round((datetime.combine(f_date_batch, t_out) - datetime.combine(f_date_batch, t_in)).total_seconds() / 3600, 2)
+                    new_records.append({
+                        '日付': pd.to_datetime(f_date_batch),
+                        '名前': name,
+                        '学年': row["学年"],
+                        '入室時間': in_str,
+                        '退室時間': out_str,
+                        '利用時間（時間）': duration
+                    })
+                else:
+                    error_msgs.append(f"{name}さん (入室と退室の時間が不正です)")
+            
+            if error_msgs:
+                for err in error_msgs:
+                    st.error(f"⚠️ エラー: {err}")
+            
+            if new_records:
+                df = load_data()
+                df = pd.concat([df, pd.DataFrame(new_records)], ignore_index=True)
+                save_to_gs(df)
+                # 入力表をリセット
+                st.session_state.batch_data = [{"氏名": "", "学年": "高1", "入室": "17:20 (6コマ開始)", "退室": "21:40 (8コマ終了)"} for _ in range(25)]
+                st.success(f"✅ {len(new_records)}名分の記録を一括保存しました！")
+                st.cache_data.clear()
+                st.rerun()
+
+
+# ---------------------------------------------------------
+# 【モード1】📝 1件ずつ記録・入力画面（従来のマトリクス）
+# ---------------------------------------------------------
+elif menu == "📝 1件ずつ":
+    def handle_time_click(idx):
+        if st.session_state.start_idx is None:
+            st.session_state.start_idx = idx
+            st.session_state.end_idx = None
+        elif st.session_state.end_idx is None:
+            if idx > st.session_state.start_idx: st.session_state.end_idx = idx
+            elif idx < st.session_state.start_idx: st.session_state.start_idx = idx 
+            else: st.session_state.start_idx = None 
+        else:
+            st.session_state.start_idx = idx
+            st.session_state.end_idx = None
+
+    def reset_time_selection():
+        st.session_state.start_idx = None
+        st.session_state.end_idx = None
+
+    st.markdown("<div class='main-title'>SINGLE ENTRY PANEL</div>", unsafe_allow_html=True)
     col1, col2 = st.columns([1, 1])
     with col1: f_date = st.date_input("利用日", jst_now.date(), max_value=jst_now.date())
-    with col2: 
-        grades = [f"小{i}" for i in range(1, 7)] + [f"中{i}" for i in range(1, 4)] + [f"高{i}" for i in range(1, 4)] + ["既卒/その他"]
-        f_grade = st.selectbox("学年", grades)
+    with col2: f_grade = st.selectbox("学年", GRADES)
         
     k_name = f"name_{st.session_state.form_key}"
-    f_name = st.text_input("氏名", placeholder="山田太郎（スペース不要）", key=k_name)
-
-    st.markdown("<div class='section-title'>⏰ 入退室時間を選択</div>", unsafe_allow_html=True)
-    st.markdown("<p style='font-size:0.9rem; color:#64748B;'>※下のセルをタップしてください。1回目で「入室」、2回目で「退室」を選択できます。</p>", unsafe_allow_html=True)
+    f_name = st.text_input("氏名", placeholder="山田太郎", key=k_name)
 
     val_in_disp = TIME_OPTIONS[st.session_state.start_idx][:5] if st.session_state.start_idx is not None else "--:--"
     val_out_disp = TIME_OPTIONS[st.session_state.end_idx][:5] if st.session_state.end_idx is not None else "--:--"
@@ -180,25 +248,31 @@ if menu == "📝 記録する":
         reset_time_selection()
         st.rerun()
 
-    st.markdown("<br>", unsafe_allow_html=True)
-    cols = st.columns(3)
-    for i, t in enumerate(TIME_OPTIONS):
-        col = cols[i % 3]
-        is_start = (i == st.session_state.start_idx)
-        is_end = (i == st.session_state.end_idx)
-        in_range = False
-        if st.session_state.start_idx is not None and st.session_state.end_idx is not None:
-            if st.session_state.start_idx <= i <= st.session_state.end_idx: in_range = True
-                
-        b_type = "primary" if (is_start or is_end or in_range) else "secondary"
-        label = t
-        if is_start: label = "入: " + t
-        elif is_end: label = "退: " + t
-        col.button(label, key=f"timebtn_{i}_{st.session_state.form_key}", on_click=handle_time_click, args=(i,), type=b_type, use_container_width=True)
+    am_options = [(i, t) for i, t in enumerate(TIME_OPTIONS) if int(t[:2]) < 13]
+    pm_options = [(i, t) for i, t in enumerate(TIME_OPTIONS) if int(t[:2]) >= 13]
 
-    st.markdown("<hr style='margin-top:30px; margin-bottom:30px;'>", unsafe_allow_html=True)
+    def render_time_grid(title, options_list):
+        st.markdown(f"<p style='color: #0A2B56; font-weight: 900; margin-top: 25px; margin-bottom: 10px; font-size: 1.1rem;'>{title}</p>", unsafe_allow_html=True)
+        for row in range(0, len(options_list), 4):
+            cols = st.columns(4)
+            for col_idx in range(4):
+                if row + col_idx < len(options_list):
+                    idx, t = options_list[row + col_idx]
+                    short_label = t.replace("コマ開始", "開").replace("コマ終了", "終").replace("(", "[").replace(")", "]")
+                    is_start = (idx == st.session_state.start_idx)
+                    is_end = (idx == st.session_state.end_idx)
+                    in_range = False
+                    if st.session_state.start_idx is not None and st.session_state.end_idx is not None:
+                        if st.session_state.start_idx <= idx <= st.session_state.end_idx: in_range = True
+                    b_type = "primary" if (is_start or is_end or in_range) else "secondary"
+                    cols[col_idx].button(short_label, key=f"timebtn_{idx}_{st.session_state.form_key}", on_click=handle_time_click, args=(idx,), type=b_type, use_container_width=True)
 
-    if st.button("💾 記録を登録する", use_container_width=True, type="primary"):
+    render_time_grid("☀️ 午前（9:00 〜 12:30）", am_options)
+    render_time_grid("🌙 午後（13:00 〜 22:00）", pm_options)
+
+    st.markdown("<hr style='margin-top:20px; margin-bottom:20px;'>", unsafe_allow_html=True)
+
+    if st.button("💾 1件記録する", use_container_width=True, type="primary"):
         f_name_clean = f_name.replace(" ", "").replace("　", "")
         if not f_name_clean: st.error("⚠️ 氏名を入力してください。")
         elif st.session_state.start_idx is None or st.session_state.end_idx is None: st.error("⚠️ 入室時間と退室時間の「両方」をセルから選択してください。")
@@ -310,7 +384,7 @@ elif menu == "📊 分析":
                 html += f"<tr><th style='border: 1px solid #CBD5E1; padding: 8px; background-color: #F8FAFC; color: #0A2B56; position: sticky; left: 0; z-index: 1;'>{wd}</th>"
                 for tb in time_bins:
                     val = heatmap_data.loc[wd, tb]
-                    ratio = val / max_val
+                    ratio = val / max_val if max_val > 0 else 0
                     bg_color = f"rgba(0, 91, 171, {ratio * 0.8})" if val > 0 else "transparent"
                     font_color = "white" if ratio > 0.5 else "#1E293B"
                     html += f"<td style='border: 1px solid #CBD5E1; padding: 8px; text-align: center; font-weight: bold; background-color: {bg_color}; color: {font_color};'>{val}</td>"
@@ -363,6 +437,11 @@ elif menu == "📊 分析":
             st.info("集計するデータがありません。")
 
 elif menu == "⚙️ 管理":
+    def get_time_index(t_str, default_idx=0):
+        for i, opt in enumerate(TIME_OPTIONS):
+            if opt.startswith(str(t_str)): return i
+        return default_idx
+        
     st.markdown("<div class='main-title'>ADMIN PANEL</div>", unsafe_allow_html=True)
     st.markdown("#### ✏️ 直近の記録の変更・削除")
     
@@ -389,10 +468,9 @@ elif menu == "⚙️ 管理":
             col_n, col_g = st.columns(2)
             with col_n: edit_name = st.text_input("氏名", value=str(target_row['名前']))
             with col_g:
-                grades = [f"小{i}" for i in range(1, 7)] + [f"中{i}" for i in range(1, 4)] + [f"高{i}" for i in range(1, 4)] + ["既卒/その他"]
                 current_grade = str(target_row['学年'])
-                g_index = grades.index(current_grade) if current_grade in grades else 0
-                edit_grade = st.selectbox("学年", grades, index=g_index)
+                g_index = GRADES.index(current_grade) if current_grade in GRADES else 0
+                edit_grade = st.selectbox("学年", GRADES, index=g_index)
                 
             col_in, col_out = st.columns(2)
             in_idx = get_time_index(target_row['入室時間'], 0)
@@ -438,4 +516,4 @@ elif menu == "⚙️ 管理":
             st.markdown("</div>", unsafe_allow_html=True)
     else: st.info("変更・削除できるデータがありません。")
 
-st.markdown("<div style='text-align: center; font-size: 0.75rem; color: #94A3B8; margin-top: 60px;'>Tokyo Kobetsu Shido Gakuin<br>Responsive System v7.1</div>", unsafe_allow_html=True)
+st.markdown("<div style='text-align: center; font-size: 0.75rem; color: #94A3B8; margin-top: 60px;'>Tokyo Kobetsu Shido Gakuin<br>Batch Entry System v11.0</div>", unsafe_allow_html=True)
