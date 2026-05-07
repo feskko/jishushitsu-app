@@ -69,7 +69,6 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# システムメッセージ表示用（リロード後もメッセージを残すため）
 if "sys_msg" not in st.session_state: st.session_state.sys_msg = None
 if "sys_err" not in st.session_state: st.session_state.sys_err = None
 
@@ -80,13 +79,15 @@ if "authenticated" not in st.session_state:
 
 if not st.session_state.authenticated:
     st.markdown("<h3 style='text-align: center; color: #0A2B56; margin-top: 15vh; margin-bottom: 20px; font-weight: 900; font-size: 2rem;'>Study Room System</h3>", unsafe_allow_html=True)
-    pwd = st.text_input("パスワード", type="password", placeholder="****")
-    if st.button("ロック解除", type="primary", use_container_width=True):
-        if pwd == APP_PASSWORD:
-            st.session_state.authenticated = True
-            st.rerun()
-        else:
-            st.error("パスワードが違います")
+    with st.form("login_form", clear_on_submit=False):
+        pwd = st.text_input("パスワード", type="password", placeholder="****")
+        submitted = st.form_submit_button("ロック解除", type="primary", use_container_width=True)
+        if submitted:
+            if pwd == APP_PASSWORD:
+                st.session_state.authenticated = True
+                st.rerun()
+            else:
+                st.error("パスワードが違います")
     st.stop()
 
 scopes = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
@@ -149,7 +150,6 @@ GRADES = ["--選択--"] + [f"小{i}" for i in range(1, 7)] + [f"中{i}" for i in
 
 menu = st.radio("メニュー", ["一括入力", "1件ずつ", "ランキング", "分析", "管理"], horizontal=True, label_visibility="collapsed")
 
-# 画面上部へのメッセージ表示
 if st.session_state.sys_msg:
     st.success(st.session_state.sys_msg)
     st.session_state.sys_msg = None
@@ -159,7 +159,6 @@ if st.session_state.sys_err:
 
 if menu == "一括入力":
     st.markdown("<div class='main-title'>BATCH ENTRY PANEL</div>", unsafe_allow_html=True)
-    st.markdown("<p style='color:#475569; font-size:0.95rem;'>🚀 <b>キーボード特化モード:</b> 氏名もコマも「全角」のまま打ってOKです。（例：「５」と打てば「5」に自動変換されます）</p>", unsafe_allow_html=True)
     
     f_date_batch = st.date_input("利用日 (全員共通)", jst_now.date(), max_value=jst_now.date())
     
@@ -205,7 +204,6 @@ if menu == "一括入力":
                     error_msgs.append(f"{name}さん (入室・退室コマが未入力です)")
                     continue
                 
-                # 全角数字を半角数字に強制変換
                 in_str = unicodedata.normalize('NFKC', str(in_raw)).strip()
                 out_str = unicodedata.normalize('NFKC', str(out_raw)).strip()
                 
@@ -217,7 +215,6 @@ if menu == "一括入力":
                 out_num = int(out_str)
                 
                 if out_num >= in_num:
-                    # 重複チェック（スプレッドシートの既存データ＋今回の新しい入力分）
                     in_time_val = f"{in_num}コマ"
                     out_time_val = f"{out_num}コマ"
                     
@@ -256,7 +253,7 @@ if menu == "一括入力":
                 save_to_gs(df)
                 st.session_state.batch_data = [{"氏名": "", "学年": "--選択--", "入室(1~8)": "", "退室(1~8)": ""} for _ in range(25)]
                 st.session_state.form_key += 1
-                st.session_state.sys_msg = f"✅ {len(new_records)}名分の記録を一括保存しました！（入力欄をリセットしました）"
+                st.session_state.sys_msg = f"{len(new_records)}名分の記録を一括保存しました。（入力欄をリセットしました）"
                 st.cache_data.clear()
                 st.rerun()
 
@@ -264,7 +261,7 @@ elif menu == "1件ずつ":
     st.markdown("<div class='main-title'>SINGLE ENTRY PANEL</div>", unsafe_allow_html=True)
     col1, col2 = st.columns([1, 1])
     with col1: f_date = st.date_input("利用日", jst_now.date(), max_value=jst_now.date())
-    with col2: f_grade = st.selectbox("学年", GRADES, index=0) # 初期値は "--選択--"
+    with col2: f_grade = st.selectbox("学年", GRADES, index=0)
         
     k_name = f"name_{st.session_state.form_key}"
     f_name = st.text_input("氏名", key=k_name)
@@ -272,7 +269,7 @@ elif menu == "1件ずつ":
     val_in_disp = TIME_OPTIONS[st.session_state.start_idx] if st.session_state.start_idx is not None else "--"
     val_out_disp = TIME_OPTIONS[st.session_state.end_idx] if st.session_state.end_idx is not None else "--"
 
-    st.markdown(f"<div style='background-color: #FFFFFF; padding: 15px; border-radius: 8px; color: #0A2B56; font-size: 1.5rem; text-align: center; margin-bottom: 20px; font-weight: 900; border: 2px dashed #005BAB;'>🕒 {val_in_disp} 〜 {val_out_disp}</div>", unsafe_allow_html=True)
+    st.markdown(f"<div style='background-color: #FFFFFF; padding: 15px; border-radius: 8px; color: #0A2B56; font-size: 1.5rem; text-align: center; margin-bottom: 20px; font-weight: 900; border: 2px dashed #005BAB;'>{val_in_disp} 〜 {val_out_disp}</div>", unsafe_allow_html=True)
 
     st.markdown("<p style='color: #0A2B56; font-weight: 900; margin-bottom: 10px; font-size: 1rem;'>コマを選択 (1回目: 入室 / 2回目: 退室)</p>", unsafe_allow_html=True)
     cols = st.columns(8)
@@ -308,7 +305,6 @@ elif menu == "1件ずつ":
                 in_time_val = TIME_OPTIONS[in_idx]
                 out_time_val = TIME_OPTIONS[out_idx]
                 
-                # 重複チェック
                 is_dup = not df[
                     (df['日付'] == pd.to_datetime(f_date)) & 
                     (df['名前'] == f_name_clean) & 
@@ -326,7 +322,7 @@ elif menu == "1件ずつ":
                     save_to_gs(df)
                     st.session_state.form_key += 1 
                     reset_time_selection()
-                    st.session_state.sys_msg = f"✅ {f_name_clean}さんの記録を保存し、入力欄をリセットしました。"
+                    st.session_state.sys_msg = f"{f_name_clean}さんの記録を保存し、入力欄をリセットしました。"
                     st.cache_data.clear()
                     st.rerun()
 
@@ -340,10 +336,10 @@ elif menu == "ランキング":
         top_rows = agg[agg['順位'] <= 3]
         for i, row in top_rows.iterrows():
             rank_val, name, grade, time_val = row['順位'], row['名前'], row['学年'], row['利用時間（時間）']
-            if rank_val == 1: rank_text, icon, border_color, bg_grad = "1st", "🥇", "#C9B037", "linear-gradient(135deg, #FFFFFF 0%, #FFFDF0 100%)"
-            elif rank_val == 2: rank_text, icon, border_color, bg_grad = "2nd", "🥈", "#B4B4B4", "linear-gradient(135deg, #FFFFFF 0%, #F8F9FA 100%)"
-            elif rank_val == 3: rank_text, icon, border_color, bg_grad = "3rd", "🥉", "#AD8A56", "linear-gradient(135deg, #FFFFFF 0%, #FCF9F5 100%)"
-            else: rank_text, icon, border_color, bg_grad = f"{rank_val}th", "🏅", "#64748B", "linear-gradient(135deg, #FFFFFF 0%, #F8FAFC 100%)"
+            if rank_val == 1: rank_text, icon, border_color, bg_grad = "1st", "", "#C9B037", "linear-gradient(135deg, #FFFFFF 0%, #FFFDF0 100%)"
+            elif rank_val == 2: rank_text, icon, border_color, bg_grad = "2nd", "", "#B4B4B4", "linear-gradient(135deg, #FFFFFF 0%, #F8F9FA 100%)"
+            elif rank_val == 3: rank_text, icon, border_color, bg_grad = "3rd", "", "#AD8A56", "linear-gradient(135deg, #FFFFFF 0%, #FCF9F5 100%)"
+            else: rank_text, icon, border_color, bg_grad = f"{rank_val}th", "", "#64748B", "linear-gradient(135deg, #FFFFFF 0%, #F8FAFC 100%)"
             html += f"<div class='rank-card' style='background: {bg_grad}; border-top: 5px solid {border_color};'><div style='display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;'><span style='font-size: 1rem; color: #64748B; font-weight: 800; letter-spacing: 1px;'>{rank_text} PLACE</span><span style='font-size: 1.5rem;'>{icon}</span></div><div style='font-size: 0.9rem; color: #0A2B56; font-weight: bold; margin-bottom: 5px;'>{grade}</div><div style='font-size: 2.2rem; font-weight: 900; color: #0F172A; margin-bottom: 15px;'>{name} <span style='font-size: 1rem; font-weight: 600; color: #64748B;'>さん</span></div><div style='display: inline-block; background-color: #F1F5F9; color: #0A2B56; padding: 6px 16px; border-radius: 8px; font-weight: 800; font-size: 1.2rem; border: 1px solid #E2E8F0;'>{time_val:.1f} <span style='font-size: 0.9rem;'>HOURS</span></div></div>"
         html += '</div>'
         st.markdown(html, unsafe_allow_html=True)
@@ -379,16 +375,23 @@ elif menu == "ランキング":
 
 elif menu == "分析":
     st.markdown("<div class='main-title'>ANALYTICS DASHBOARD</div>", unsafe_allow_html=True)
-    tab1, tab2 = st.tabs(["混雑状況ヒートマップ", "生徒個別ダッシュボード"])
+    tab1, tab2, tab3 = st.tabs(["混雑状況", "生徒個別", "翌週の予測"])
     df_ana = load_data()
+    jst_today = pd.Timestamp(jst_now.date())
 
     with tab1:
         st.markdown("<div class='section-title'>曜日・コマ別の混雑状況</div>", unsafe_allow_html=True)
         if not df_ana.empty:
+            df_ana['年月'] = pd.to_datetime(df_ana['日付']).dt.strftime('%Y年%m月')
+            month_options = ["累計"] + sorted(df_ana['年月'].dropna().unique().tolist(), reverse=True)
+            selected_period = st.selectbox("集計対象を選択", month_options)
+
+            target_df = df_ana if selected_period == "累計" else df_ana[df_ana['年月'] == selected_period]
+
             weekdays = ["月", "火", "水", "木", "金", "土", "日"]
             heatmap_data = pd.DataFrame(0, index=weekdays, columns=TIME_OPTIONS)
 
-            for _, row in df_ana.iterrows():
+            for _, row in target_df.iterrows():
                 if pd.isnull(row['日付']) or not row['入室時間'] or not row['退室時間']: continue
                 try:
                     dt = pd.to_datetime(row['日付'])
@@ -433,7 +436,7 @@ elif menu == "分析":
                     student_df = df_ana[df_ana['名前'] == selected_name].copy()
                     student_df['日付'] = pd.to_datetime(student_df['日付'])
 
-                    this_month = pd.Timestamp(jst_now.date()).replace(day=1)
+                    this_month = jst_today.replace(day=1)
                     sm_df = student_df[student_df['日付'] >= this_month]
                     total_h = sm_df['利用時間（時間）'].sum()
 
@@ -454,31 +457,78 @@ elif menu == "分析":
             else: st.info("検索できる生徒データがありません。")
         else: st.info("集計するデータがありません。")
 
+    with tab3:
+        st.markdown("<div class='section-title'>来週の混雑予測（AI推計）</div>", unsafe_allow_html=True)
+        st.markdown("<p style='color:#475569; font-size:0.95rem;'>直近4週間（過去28日間）の実際の利用データを解析し、来週の各コマに平均して何人の生徒が来るかを推計しています。</p>", unsafe_allow_html=True)
+        
+        if not df_ana.empty:
+            four_weeks_ago = jst_today - pd.Timedelta(days=28)
+            df_recent = df_ana[pd.to_datetime(df_ana['日付']) >= four_weeks_ago]
+            
+            if not df_recent.empty:
+                weekdays = ["月", "火", "水", "木", "金", "土", "日"]
+                predict_data = pd.DataFrame(0.0, index=weekdays, columns=TIME_OPTIONS)
+
+                for _, row in df_recent.iterrows():
+                    if pd.isnull(row['日付']) or not row['入室時間'] or not row['退室時間']: continue
+                    try:
+                        dt = pd.to_datetime(row['日付'])
+                        wd = weekdays[dt.weekday()]
+                        in_idx = TIME_OPTIONS.index(row['入室時間'])
+                        out_idx = TIME_OPTIONS.index(row['退室時間'])
+                        for i in range(in_idx, out_idx + 1):
+                            # 4週間分なので、1回あたり 0.25人 として加算すると平均になる
+                            predict_data.loc[wd, TIME_OPTIONS[i]] += 0.25
+                    except: continue
+
+                max_val = predict_data.values.max()
+                max_val = max(max_val, 1)
+
+                html = "<div style='overflow-x: auto;'><table style='width:100%; border-collapse: collapse; margin-bottom: 20px; min-width: 600px;'>"
+                html += "<tr><th style='border: 1px solid #CBD5E1; padding: 8px; background-color: #F8FAFC; color: #0A2B56; position: sticky; left: 0; z-index: 1;'>曜日</th>"
+                for tb in TIME_OPTIONS: html += f"<th style='border: 1px solid #CBD5E1; padding: 8px; background-color: #F8FAFC; color: #0A2B56; font-size:0.8rem;'>{tb}</th>"
+                html += "</tr>"
+
+                for wd in weekdays:
+                    html += f"<tr><th style='border: 1px solid #CBD5E1; padding: 8px; background-color: #F8FAFC; color: #0A2B56; position: sticky; left: 0; z-index: 1;'>{wd}</th>"
+                    for tb in TIME_OPTIONS:
+                        val = predict_data.loc[wd, tb]
+                        ratio = val / max_val if max_val > 0 else 0
+                        bg_color = f"rgba(217, 119, 6, {ratio * 0.8})" if val > 0 else "transparent" # 予測はオレンジ系
+                        font_color = "white" if ratio > 0.5 else "#1E293B"
+                        display_val = f"{val:.1f}人" if val > 0 else "-"
+                        html += f"<td style='border: 1px solid #CBD5E1; padding: 8px; text-align: center; font-size:0.85rem; font-weight: bold; background-color: {bg_color}; color: {font_color};'>{display_val}</td>"
+                    html += "</tr>"
+                html += "</table></div>"
+                st.markdown(html, unsafe_allow_html=True)
+            else:
+                st.info("直近4週間のデータがないため、予測を計算できません。")
+        else:
+            st.info("集計するデータがありません。")
+
 elif menu == "管理":
     st.markdown("<div class='main-title'>ADMIN PANEL</div>", unsafe_allow_html=True)
     df_manage = load_data()
     
     if not df_manage.empty:
-        tab_edit, tab_del = st.tabs(["✏️ 1件ずつ編集", "🗑️ 複数の一括削除"])
+        tab_edit, tab_del = st.tabs(["1件ずつ編集", "複数の一括削除"])
         
-        # 削除・編集用のリスト作成
         options = []
-        for i in reversed(df_manage.index): # 新しい順に全て表示
+        for i in reversed(df_manage.index):
             row = df_manage.loc[i]
             d_str = row['日付'].strftime('%m/%d') if pd.notnull(row['日付']) else "不明"
             options.append((str(i), f"{d_str} | {row['名前']} ({row['入室時間']} - {row['退室時間']})"))
             
         with tab_del:
             st.markdown("##### まとめて削除")
-            st.markdown("<p style='font-size: 0.9rem; color: #64748B;'>間違えて入力したデータを複数選択して、一気に消すことができます。</p>", unsafe_allow_html=True)
             selected_dels = st.multiselect("削除する記録を選択してください", options, format_func=lambda x: x[1])
             
-            if st.button("🚨 選択した記録を完全に削除", type="primary"):
+            if st.button("選択した記録を完全に削除", type="primary"):
                 if selected_dels:
                     indices_to_drop = [int(x[0]) for x in selected_dels]
                     df_manage = df_manage.drop(indices_to_drop).reset_index(drop=True)
                     save_to_gs(df_manage)
-                    st.session_state.sys_msg = f"🗑️ {len(indices_to_drop)}件の記録を削除しました。"
+                    st.session_state.sys_msg = f"{len(indices_to_drop)}件の記録を削除しました。"
                     st.cache_data.clear()
                     st.rerun()
                 else:
@@ -513,24 +563,33 @@ elif menu == "管理":
                 with col_out: edit_out = st.number_input("退室コマ(1-8)", min_value=1, max_value=8, value=out_idx, step=1)
                 
                 st.markdown("<br>", unsafe_allow_html=True)
-                if st.button("この内容で上書き保存", use_container_width=True, type="primary"):
-                    edit_name_clean = edit_name.replace(" ", "").replace("　", "")
-                    
-                    if edit_name_clean:
-                        if edit_grade == "--選択--": st.error("学年を選択してください。")
-                        elif edit_out < edit_in: st.error("退室コマは入室コマ以降を選択してください")
-                        else:
-                            duration = float((edit_out - edit_in + 1) * 1.5)
-                            df_manage.at[target_idx, '日付'] = pd.to_datetime(edit_date)
-                            df_manage.at[target_idx, '名前'] = edit_name_clean
-                            df_manage.at[target_idx, '学年'] = edit_grade
-                            df_manage.at[target_idx, '入室時間'] = f"{edit_in}コマ"
-                            df_manage.at[target_idx, '退室時間'] = f"{edit_out}コマ"
-                            df_manage.at[target_idx, '利用時間（時間）'] = duration
-                            save_to_gs(df_manage)
-                            st.session_state.sys_msg = "✅ 記録を更新しました。"
-                            st.cache_data.clear()
-                            st.rerun()
-                    else: st.error("氏名を入力してください。")
+                col_btn1, col_btn2 = st.columns(2)
+                with col_btn1:
+                    if st.button("この内容で上書き保存", use_container_width=True, type="primary"):
+                        edit_name_clean = edit_name.replace(" ", "").replace("　", "")
+                        
+                        if edit_name_clean:
+                            if edit_grade == "--選択--": st.error("学年を選択してください。")
+                            elif edit_out < edit_in: st.error("退室コマは入室コマ以降を選択してください")
+                            else:
+                                duration = float((edit_out - edit_in + 1) * 1.5)
+                                df_manage.at[target_idx, '日付'] = pd.to_datetime(edit_date)
+                                df_manage.at[target_idx, '名前'] = edit_name_clean
+                                df_manage.at[target_idx, '学年'] = edit_grade
+                                df_manage.at[target_idx, '入室時間'] = f"{edit_in}コマ"
+                                df_manage.at[target_idx, '退室時間'] = f"{edit_out}コマ"
+                                df_manage.at[target_idx, '利用時間（時間）'] = duration
+                                save_to_gs(df_manage)
+                                st.session_state.sys_msg = "記録を更新しました。"
+                                st.cache_data.clear()
+                                st.rerun()
+                        else: st.error("氏名を入力してください。")
+                with col_btn2:
+                    if st.button("この記録を完全に削除", use_container_width=True):
+                        df_manage = df_manage.drop(target_idx).reset_index(drop=True)
+                        save_to_gs(df_manage)
+                        st.session_state.sys_msg = "削除しました。"
+                        st.cache_data.clear()
+                        st.rerun()
                 st.markdown("</div>", unsafe_allow_html=True)
     else: st.info("変更・削除できるデータがありません。")
