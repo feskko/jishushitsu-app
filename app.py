@@ -6,10 +6,13 @@ from google.oauth2.service_account import Credentials
 import json
 import os
 import base64
+import unicodedata
 import streamlit.components.v1 as components
 
+# 日本時間の「今」を取得
 jst_now = datetime.utcnow() + timedelta(hours=9)
 
+# --- 1. ページ構成 ---
 st.set_page_config(page_title="TKG Study Room Analytics", page_icon="icon.png", layout="wide")
 
 if os.path.exists("icon.png"):
@@ -36,7 +39,7 @@ st.markdown("""
     .main-title::after { content: ''; position: absolute; left: 0; bottom: -3px; width: 100px; height: 3px; background: linear-gradient(90deg, #0A2B56, #005BAB); }
     .section-title { font-weight: 800; color: #0A2B56; margin-top: 2rem; margin-bottom: 1rem; padding-left: 10px; border-left: 5px solid #005BAB; display: flex; align-items: center; gap: 8px; }
     
-    div[role="radiogroup"] { display: flex; background-color: #FFFFFF; padding: 5px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); margin-bottom: 25px; margin-top: 10px; }
+    div[role="radiogroup"] { display: flex; background-color: #FFFFFF; padding: 5px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); margin-bottom: 20px; margin-top: 5px; }
     div[role="radiogroup"] label { flex: 1; text-align: center; justify-content: center; padding: 10px 5px !important; margin: 0 !important; border-radius: 8px; transition: 0.2s; cursor: pointer; }
     div[role="radiogroup"] label[data-checked="true"] { background-color: #0A2B56; }
     div[role="radiogroup"] label[data-checked="true"] p { color: #FFFFFF !important; font-weight: 800; }
@@ -60,12 +63,15 @@ st.markdown("""
         div[role="radiogroup"] { width: 100%; flex-wrap: wrap; } div[role="radiogroup"] label { min-width: 45%; } 
         .rank-card { width: 100%; padding: 20px; border-radius: 12px; margin-bottom: 15px; border: 1px solid #E2E8F0; } 
         div[data-baseweb="input"] > div, div[data-baseweb="select"] > div { height: 3.5rem; } 
-        /* スマホ向け：8つのボタンを4列×2行で綺麗に並べる */
         div[data-testid="stHorizontalBlock"]:has(> div[data-testid="column"]:nth-child(8)) { flex-wrap: wrap !important; }
         div[data-testid="stHorizontalBlock"]:has(> div[data-testid="column"]:nth-child(8)) > div[data-testid="column"] { flex: 1 1 23% !important; min-width: 23% !important; padding: 0 3px !important; margin-bottom: 8px !important; }
     }
 </style>
 """, unsafe_allow_html=True)
+
+# システムメッセージ表示用（リロード後もメッセージを残すため）
+if "sys_msg" not in st.session_state: st.session_state.sys_msg = None
+if "sys_err" not in st.session_state: st.session_state.sys_err = None
 
 APP_PASSWORD = "tkg-1985" 
 
@@ -139,19 +145,26 @@ def reset_time_selection():
     st.session_state.end_idx = None
 
 TIME_OPTIONS = [f"{i}コマ" for i in range(1, 9)]
-GRADES = [f"小{i}" for i in range(1, 7)] + [f"中{i}" for i in range(1, 4)] + [f"高{i}" for i in range(1, 4)] + ["既卒/その他"]
+GRADES = ["--選択--"] + [f"小{i}" for i in range(1, 7)] + [f"中{i}" for i in range(1, 4)] + [f"高{i}" for i in range(1, 4)] + ["既卒/その他"]
 
 menu = st.radio("メニュー", ["一括入力", "1件ずつ", "ランキング", "分析", "管理"], horizontal=True, label_visibility="collapsed")
 
+# 画面上部へのメッセージ表示
+if st.session_state.sys_msg:
+    st.success(st.session_state.sys_msg)
+    st.session_state.sys_msg = None
+if st.session_state.sys_err:
+    st.error(st.session_state.sys_err)
+    st.session_state.sys_err = None
+
 if menu == "一括入力":
     st.markdown("<div class='main-title'>BATCH ENTRY PANEL</div>", unsafe_allow_html=True)
-    st.markdown("<p style='color:#475569; font-size:0.95rem;'>🚀 <b>キーボード特化モード:</b> マウスを使わず、<code>Tab</code>キーで移動しながら数字だけ打ち込むと最速です。</p>", unsafe_allow_html=True)
+    st.markdown("<p style='color:#475569; font-size:0.95rem;'>🚀 <b>キーボード特化モード:</b> 氏名もコマも「全角」のまま打ってOKです。（例：「５」と打てば「5」に自動変換されます）</p>", unsafe_allow_html=True)
     
     f_date_batch = st.date_input("利用日 (全員共通)", jst_now.date(), max_value=jst_now.date())
     
     if "batch_data" not in st.session_state:
-        # 初期状態は「数字」で持たせることでタイピングをスムーズに
-        st.session_state.batch_data = [{"氏名": "", "学年": "高2", "入室コマ(1~8)": None, "退室コマ(1~8)": None} for _ in range(25)]
+        st.session_state.batch_data = [{"氏名": "", "学年": "--選択--", "入室(1~8)": "", "退室(1~8)": ""} for _ in range(25)]
         
     df_empty = pd.DataFrame(st.session_state.batch_data)
     
@@ -160,12 +173,13 @@ if menu == "一括入力":
         column_config={
             "氏名": st.column_config.TextColumn("氏名", width="medium"),
             "学年": st.column_config.SelectboxColumn("学年", options=GRADES, width="small"),
-            "入室コマ(1~8)": st.column_config.NumberColumn("入室(1-8)", min_value=1, max_value=8, step=1, format="%d", width="small"),
-            "退室コマ(1~8)": st.column_config.NumberColumn("退室(1-8)", min_value=1, max_value=8, step=1, format="%d", width="small"),
+            "入室(1~8)": st.column_config.TextColumn("入室(1-8)", width="small"),
+            "退室(1~8)": st.column_config.TextColumn("退室(1-8)", width="small"),
         },
         num_rows="dynamic",
         use_container_width=True,
-        height=500
+        height=500,
+        key=f"editor_{st.session_state.form_key}"
     )
     
     if st.button("表のデータをすべて保存する", type="primary", use_container_width=True):
@@ -175,28 +189,59 @@ if menu == "一括入力":
         else:
             new_records = []
             error_msgs = []
+            df_current = load_data()
             
             for idx, row in valid_rows.iterrows():
                 name = row["氏名"].replace(" ", "").replace("　", "")
-                in_num = row["入室コマ(1~8)"]
-                out_num = row["退室コマ(1~8)"]
+                grade = row["学年"]
+                in_raw = row["入室(1~8)"]
+                out_raw = row["退室(1~8)"]
                 
-                # 入力チェック
-                if pd.isna(in_num) or pd.isna(out_num):
+                if grade == "--選択--":
+                    error_msgs.append(f"{name}さん (学年が選択されていません)")
+                    continue
+                
+                if not str(in_raw).strip() or not str(out_raw).strip():
                     error_msgs.append(f"{name}さん (入室・退室コマが未入力です)")
                     continue
                 
-                in_num = int(in_num)
-                out_num = int(out_num)
+                # 全角数字を半角数字に強制変換
+                in_str = unicodedata.normalize('NFKC', str(in_raw)).strip()
+                out_str = unicodedata.normalize('NFKC', str(out_raw)).strip()
+                
+                if not (in_str.isdigit() and out_str.isdigit() and 1 <= int(in_str) <= 8 and 1 <= int(out_str) <= 8):
+                    error_msgs.append(f"{name}さん (コマは1〜8の数字で入力してください)")
+                    continue
+                
+                in_num = int(in_str)
+                out_num = int(out_str)
                 
                 if out_num >= in_num:
+                    # 重複チェック（スプレッドシートの既存データ＋今回の新しい入力分）
+                    in_time_val = f"{in_num}コマ"
+                    out_time_val = f"{out_num}コマ"
+                    
+                    is_dup_current = not df_current[
+                        (df_current['日付'] == pd.to_datetime(f_date_batch)) & 
+                        (df_current['名前'] == name) & 
+                        (df_current['学年'] == grade) & 
+                        (df_current['入室時間'] == in_time_val) & 
+                        (df_current['退室時間'] == out_time_val)
+                    ].empty
+                    
+                    is_dup_new = any(r['名前'] == name and r['学年'] == grade and r['入室時間'] == in_time_val and r['退室時間'] == out_time_val for r in new_records)
+                    
+                    if is_dup_current or is_dup_new:
+                        error_msgs.append(f"{name}さん (既に同じ記録が登録されています)")
+                        continue
+                        
                     duration = float((out_num - in_num + 1) * 1.5)
                     new_records.append({
                         '日付': pd.to_datetime(f_date_batch),
                         '名前': name,
-                        '学年': row["学年"],
-                        '入室時間': f"{in_num}コマ",
-                        '退室時間': f"{out_num}コマ",
+                        '学年': grade,
+                        '入室時間': in_time_val,
+                        '退室時間': out_time_val,
                         '利用時間（時間）': duration
                     })
                 else:
@@ -207,11 +252,11 @@ if menu == "一括入力":
                     st.error(f"エラー: {err}")
             
             if new_records:
-                df = load_data()
-                df = pd.concat([df, pd.DataFrame(new_records)], ignore_index=True)
+                df = pd.concat([df_current, pd.DataFrame(new_records)], ignore_index=True)
                 save_to_gs(df)
-                st.session_state.batch_data = [{"氏名": "", "学年": "高2", "入室コマ(1~8)": None, "退室コマ(1~8)": None} for _ in range(25)]
-                st.success(f"{len(new_records)}名分の記録を一括保存しました。")
+                st.session_state.batch_data = [{"氏名": "", "学年": "--選択--", "入室(1~8)": "", "退室(1~8)": ""} for _ in range(25)]
+                st.session_state.form_key += 1
+                st.session_state.sys_msg = f"✅ {len(new_records)}名分の記録を一括保存しました！（入力欄をリセットしました）"
                 st.cache_data.clear()
                 st.rerun()
 
@@ -219,7 +264,7 @@ elif menu == "1件ずつ":
     st.markdown("<div class='main-title'>SINGLE ENTRY PANEL</div>", unsafe_allow_html=True)
     col1, col2 = st.columns([1, 1])
     with col1: f_date = st.date_input("利用日", jst_now.date(), max_value=jst_now.date())
-    with col2: f_grade = st.selectbox("学年", GRADES, index=GRADES.index("高2"))
+    with col2: f_grade = st.selectbox("学年", GRADES, index=0) # 初期値は "--選択--"
         
     k_name = f"name_{st.session_state.form_key}"
     f_name = st.text_input("氏名", key=k_name)
@@ -229,7 +274,6 @@ elif menu == "1件ずつ":
 
     st.markdown(f"<div style='background-color: #FFFFFF; padding: 15px; border-radius: 8px; color: #0A2B56; font-size: 1.5rem; text-align: center; margin-bottom: 20px; font-weight: 900; border: 2px dashed #005BAB;'>🕒 {val_in_disp} 〜 {val_out_disp}</div>", unsafe_allow_html=True)
 
-    # ==== 8つのボタンを一列（スマホでは2行）に並べる ====
     st.markdown("<p style='color: #0A2B56; font-weight: 900; margin-bottom: 10px; font-size: 1rem;'>コマを選択 (1回目: 入室 / 2回目: 退室)</p>", unsafe_allow_html=True)
     cols = st.columns(8)
     for idx in range(8):
@@ -242,7 +286,6 @@ elif menu == "1件ずつ":
         
         b_type = "primary" if (is_start or is_end or in_range) else "secondary"
         cols[idx].button(t_label, key=f"timebtn_{idx}_{st.session_state.form_key}", on_click=handle_time_click, args=(idx,), type=b_type, use_container_width=True)
-    # ====================================================
 
     st.markdown("<br>", unsafe_allow_html=True)
     if st.button("選択をリセット", use_container_width=True, type="secondary"):
@@ -254,22 +297,38 @@ elif menu == "1件ずつ":
     if st.button("1件記録する", use_container_width=True, type="primary"):
         f_name_clean = f_name.replace(" ", "").replace("　", "")
         if not f_name_clean: st.error("氏名を入力してください。")
+        elif f_grade == "--選択--": st.error("学年を選択してください。")
         elif st.session_state.start_idx is None or st.session_state.end_idx is None: st.error("入室コマと退室コマの両方を選択してください。")
         else:
             in_idx = st.session_state.start_idx
             out_idx = st.session_state.end_idx
             if out_idx < in_idx: st.error("退室コマは入室コマ以降を選択してください")
             else:
-                duration = float((out_idx - in_idx + 1) * 1.5)
                 df = load_data()
-                new_row = pd.DataFrame([{'日付': pd.to_datetime(f_date), '名前': f_name_clean, '学年': f_grade, '入室時間': TIME_OPTIONS[in_idx], '退室時間': TIME_OPTIONS[out_idx], '利用時間（時間）': duration}])
-                df = pd.concat([df, new_row], ignore_index=True)
-                save_to_gs(df)
-                st.session_state.form_key += 1 
-                reset_time_selection()
-                st.success(f"{f_name_clean}さんの記録を保存しました。")
-                st.cache_data.clear()
-                st.rerun()
+                in_time_val = TIME_OPTIONS[in_idx]
+                out_time_val = TIME_OPTIONS[out_idx]
+                
+                # 重複チェック
+                is_dup = not df[
+                    (df['日付'] == pd.to_datetime(f_date)) & 
+                    (df['名前'] == f_name_clean) & 
+                    (df['学年'] == f_grade) & 
+                    (df['入室時間'] == in_time_val) & 
+                    (df['退室時間'] == out_time_val)
+                ].empty
+                
+                if is_dup:
+                    st.error("この記録は既に登録されています（重複エラー）。")
+                else:
+                    duration = float((out_idx - in_idx + 1) * 1.5)
+                    new_row = pd.DataFrame([{'日付': pd.to_datetime(f_date), '名前': f_name_clean, '学年': f_grade, '入室時間': in_time_val, '退室時間': out_time_val, '利用時間（時間）': duration}])
+                    df = pd.concat([df, new_row], ignore_index=True)
+                    save_to_gs(df)
+                    st.session_state.form_key += 1 
+                    reset_time_selection()
+                    st.session_state.sys_msg = f"✅ {f_name_clean}さんの記録を保存し、入力欄をリセットしました。"
+                    st.cache_data.clear()
+                    st.rerun()
 
 elif menu == "ランキング":
     st.markdown("<div class='main-title'>STUDY HOURS RANKING</div>", unsafe_allow_html=True)
@@ -397,50 +456,69 @@ elif menu == "分析":
 
 elif menu == "管理":
     st.markdown("<div class='main-title'>ADMIN PANEL</div>", unsafe_allow_html=True)
-    st.markdown("#### 直近の記録の変更・削除")
     df_manage = load_data()
+    
     if not df_manage.empty:
-        options = [("-1", "-- 編集・削除する記録を選択してください --")]
-        for i in reversed(df_manage.index[-30:]):
+        tab_edit, tab_del = st.tabs(["✏️ 1件ずつ編集", "🗑️ 複数の一括削除"])
+        
+        # 削除・編集用のリスト作成
+        options = []
+        for i in reversed(df_manage.index): # 新しい順に全て表示
             row = df_manage.loc[i]
             d_str = row['日付'].strftime('%m/%d') if pd.notnull(row['日付']) else "不明"
             options.append((str(i), f"{d_str} | {row['名前']} ({row['入室時間']} - {row['退室時間']})"))
-        
-        selected_mng = st.selectbox("対象記録", options, format_func=lambda x: x[1], label_visibility="collapsed")
-        
-        if selected_mng[0] != "-1":
-            target_idx = int(selected_mng[0])
-            target_row = df_manage.loc[target_idx]
-            st.markdown("<div style='margin-top: 20px; padding: 20px; border-radius: 12px; background-color: #FFFFFF; border: 1px solid #CBD5E1;'>", unsafe_allow_html=True)
-            st.markdown("##### 記録の編集", unsafe_allow_html=True)
             
-            default_date = target_row['日付'].date() if pd.notnull(target_row['日付']) else jst_now.date()
-            edit_date = st.date_input("利用日", default_date)
+        with tab_del:
+            st.markdown("##### まとめて削除")
+            st.markdown("<p style='font-size: 0.9rem; color: #64748B;'>間違えて入力したデータを複数選択して、一気に消すことができます。</p>", unsafe_allow_html=True)
+            selected_dels = st.multiselect("削除する記録を選択してください", options, format_func=lambda x: x[1])
             
-            col_n, col_g = st.columns(2)
-            with col_n: edit_name = st.text_input("氏名", value=str(target_row['名前']))
-            with col_g:
-                current_grade = str(target_row['学年'])
-                g_index = GRADES.index(current_grade) if current_grade in GRADES else 0
-                edit_grade = st.selectbox("学年", GRADES, index=g_index)
+            if st.button("🚨 選択した記録を完全に削除", type="primary"):
+                if selected_dels:
+                    indices_to_drop = [int(x[0]) for x in selected_dels]
+                    df_manage = df_manage.drop(indices_to_drop).reset_index(drop=True)
+                    save_to_gs(df_manage)
+                    st.session_state.sys_msg = f"🗑️ {len(indices_to_drop)}件の記録を削除しました。"
+                    st.cache_data.clear()
+                    st.rerun()
+                else:
+                    st.warning("削除する記録が選択されていません。")
+
+        with tab_edit:
+            st.markdown("##### 記録の編集")
+            selected_mng = st.selectbox("編集する記録", [("-1", "-- 選択してください --")] + options[:50], format_func=lambda x: x[1])
+            
+            if selected_mng[0] != "-1":
+                target_idx = int(selected_mng[0])
+                target_row = df_manage.loc[target_idx]
+                st.markdown("<div style='margin-top: 10px; padding: 20px; border-radius: 12px; background-color: #FFFFFF; border: 1px solid #CBD5E1;'>", unsafe_allow_html=True)
                 
-            col_in, col_out = st.columns(2)
-            in_val = target_row['入室時間']
-            out_val = target_row['退室時間']
-            in_idx = int(in_val.replace("コマ", "")) if "コマ" in str(in_val) else 1
-            out_idx = int(out_val.replace("コマ", "")) if "コマ" in str(out_val) else 1
-            
-            with col_in: edit_in = st.number_input("入室コマ(1-8)", min_value=1, max_value=8, value=in_idx, step=1)
-            with col_out: edit_out = st.number_input("退室コマ(1-8)", min_value=1, max_value=8, value=out_idx, step=1)
-            
-            st.markdown("<br>", unsafe_allow_html=True)
-            col_btn1, col_btn2 = st.columns(2)
-            with col_btn1:
+                default_date = target_row['日付'].date() if pd.notnull(target_row['日付']) else jst_now.date()
+                edit_date = st.date_input("利用日", default_date)
+                
+                col_n, col_g = st.columns(2)
+                with col_n: edit_name = st.text_input("氏名", value=str(target_row['名前']))
+                with col_g:
+                    current_grade = str(target_row['学年'])
+                    g_index = GRADES.index(current_grade) if current_grade in GRADES else 0
+                    edit_grade = st.selectbox("学年", GRADES, index=g_index)
+                    
+                col_in, col_out = st.columns(2)
+                in_val = target_row['入室時間']
+                out_val = target_row['退室時間']
+                in_idx = int(in_val.replace("コマ", "")) if "コマ" in str(in_val) else 1
+                out_idx = int(out_val.replace("コマ", "")) if "コマ" in str(out_val) else 1
+                
+                with col_in: edit_in = st.number_input("入室コマ(1-8)", min_value=1, max_value=8, value=in_idx, step=1)
+                with col_out: edit_out = st.number_input("退室コマ(1-8)", min_value=1, max_value=8, value=out_idx, step=1)
+                
+                st.markdown("<br>", unsafe_allow_html=True)
                 if st.button("この内容で上書き保存", use_container_width=True, type="primary"):
                     edit_name_clean = edit_name.replace(" ", "").replace("　", "")
                     
                     if edit_name_clean:
-                        if edit_out < edit_in: st.error("退室コマは入室コマ以降を選択してください")
+                        if edit_grade == "--選択--": st.error("学年を選択してください。")
+                        elif edit_out < edit_in: st.error("退室コマは入室コマ以降を選択してください")
                         else:
                             duration = float((edit_out - edit_in + 1) * 1.5)
                             df_manage.at[target_idx, '日付'] = pd.to_datetime(edit_date)
@@ -450,16 +528,9 @@ elif menu == "管理":
                             df_manage.at[target_idx, '退室時間'] = f"{edit_out}コマ"
                             df_manage.at[target_idx, '利用時間（時間）'] = duration
                             save_to_gs(df_manage)
-                            st.success("記録を更新しました。")
+                            st.session_state.sys_msg = "✅ 記録を更新しました。"
                             st.cache_data.clear()
                             st.rerun()
                     else: st.error("氏名を入力してください。")
-            with col_btn2:
-                if st.button("この記録を完全に削除", use_container_width=True):
-                    df_manage = df_manage.drop(target_idx).reset_index(drop=True)
-                    save_to_gs(df_manage)
-                    st.success("削除しました。")
-                    st.cache_data.clear()
-                    st.rerun()
-            st.markdown("</div>", unsafe_allow_html=True)
+                st.markdown("</div>", unsafe_allow_html=True)
     else: st.info("変更・削除できるデータがありません。")
