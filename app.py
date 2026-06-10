@@ -12,6 +12,33 @@ import streamlit.components.v1 as components
 # 日本時間の「今」を取得
 jst_now = datetime.utcnow() + timedelta(hours=9)
 
+# 講習期間の判定
+def is_special_period(dt_date):
+    if dt_date is None: return False
+    m = dt_date.month
+    d = dt_date.day
+    # 春季講習: 3/15 〜 4/7
+    if (m == 3 and d >= 15) or (m == 4 and d <= 7): return True
+    # 夏期講習: 7/15 〜 8/31
+    if (m == 7 and d >= 15) or m == 8: return True
+    # 冬季講習: 12/1 〜 1/7
+    if m == 12 or (m == 1 and d <= 7): return True
+    return False
+
+# 分析用のタイムスロット取得（月によって9時からか13時からか変える）
+def get_time_slots_for_period(period_str):
+    if period_str == "累計":
+        return [f"{h:02d}:00" for h in range(9, 23)]
+    try:
+        m = int(period_str.split("年")[1].replace("月", ""))
+        # 講習が含まれる月
+        if m in [1, 3, 4, 7, 8, 12]:
+            return [f"{h:02d}:00" for h in range(9, 23)]
+        else:
+            return [f"{h:02d}:00" for h in range(12, 23)]
+    except:
+        return [f"{h:02d}:00" for h in range(9, 23)]
+
 # --- 1. ページ構成 ---
 st.set_page_config(page_title="TKG Study Room Analytics", page_icon="icon.png", layout="wide")
 
@@ -54,6 +81,13 @@ st.markdown("""
     button[kind="primary"] { background: linear-gradient(135deg, #0A2B56 0%, #005BAB 100%) !important; color: #FFFFFF !important; border: none !important; font-weight: 800 !important; border-radius: 6px !important; box-shadow: 0 4px 6px -1px rgba(0, 91, 171, 0.3) !important; min-height: 3.5rem !important; padding: 2px !important; transition: all 0.2s ease; }
     button[kind="primary"]:active { transform: translateY(2px); }
     button p { font-size: 1.3rem !important; margin: 0 !important; font-weight: bold; }
+
+    /* メトリクス（パフォーマンスサマリー）を見やすくするCSS */
+    div[data-testid="metric-container"] { background-color: #FFFFFF; border: 1px solid #CBD5E1; border-radius: 12px; padding: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+    div[data-testid="metric-container"] label { color: #475569 !important; font-size: 1rem !important; font-weight: bold; }
+    div[data-testid="metric-container"] div[data-testid="stMetricValue"] { color: #0A2B56 !important; font-weight: 900 !important; font-size: 2.2rem !important; }
+    div[data-testid="metric-container"] div[data-testid="stMetricDelta"] { font-size: 1.1rem !important; font-weight: bold !important; }
+    div[data-testid="metric-container"] div[data-testid="stMetricDelta"] svg { fill: currentColor !important; }
 
     @media (min-width: 768px) { 
         .main-title { font-size: 2.4rem; } .section-title { font-size: 1.6rem; } div[role="radiogroup"] { max-width: 600px; } .rank-card { flex: 1; min-width: 30%; padding: 25px; border-radius: 16px; border: 1px solid #E2E8F0; } div[data-baseweb="input"] > div, div[data-baseweb="select"] > div { height: 3.2rem; }
@@ -152,7 +186,6 @@ def calc_duration(in_time, out_time):
 if "form_key" not in st.session_state: st.session_state.form_key = 0
 
 GRADES = ["--選択--"] + [f"小{i}" for i in range(1, 7)] + [f"中{i}" for i in range(1, 4)] + [f"高{i}" for i in range(1, 4)] + ["既卒/その他"]
-TIME_SLOTS = [f"{h:02d}:00" for h in range(9, 23)] # 09:00 - 22:00のヒートマップ用
 
 menu = st.radio("メニュー", ["一括入力", "1件ずつ", "ランキング", "分析", "管理"], horizontal=True, label_visibility="collapsed")
 
@@ -208,6 +241,12 @@ if menu == "一括入力":
                 
                 if in_raw is None or out_raw is None or pd.isna(in_raw) or pd.isna(out_raw):
                     error_msgs.append(f"{name}さん (開始・終了時間が未入力です)")
+                    continue
+                    
+                # 講習期間外の午前中入力チェック
+                in_dt = in_raw if not isinstance(in_raw, str) else datetime.strptime(in_raw[:5], "%H:%M").time()
+                if not is_special_period(f_date_batch) and in_dt.hour < 12:
+                    error_msgs.append(f"{name}さん (通常期間は12時以降を入力してください)")
                     continue
                 
                 duration = calc_duration(in_raw, out_raw)
@@ -276,6 +315,7 @@ elif menu == "1件ずつ":
         if not f_name_clean: st.error("氏名を入力してください。")
         elif f_grade == "--選択--": st.error("学年を選択してください。")
         elif in_time is None or out_time is None: st.error("開始時間と終了時間の両方を入力してください。")
+        elif not is_special_period(f_date) and in_time.hour < 12: st.error("通常期間は12時以降を入力してください。")
         else:
             duration = calc_duration(in_time, out_time)
             if duration <= 0: 
@@ -391,11 +431,10 @@ elif menu == "分析":
 
     tab1, tab2, tab3 = st.tabs(["混雑状況", "生徒個別", "翌週の予測"])
 
-    def get_active_slots(in_str, out_str):
+    def get_active_slots(in_str, out_str, slots_list):
         def parse_time(t_str):
             t_str = str(t_str).strip()
             if "コマ" in t_str:
-                # 過去のコマ表記を時間に変換（1コマ=13:00〜）
                 try:
                     koma = int(t_str.replace("コマ", ""))
                     hour = 13 + int((koma - 1) * 1.5)
@@ -410,15 +449,15 @@ elif menu == "分析":
 
         in_t = parse_time(in_str)
         out_t = parse_time(out_str)
-        
         if not in_t or not out_t: return []
         
         slots = []
-        for h in range(9, 23):
+        for slot_str in slots_list:
+            h = int(slot_str[:2])
             slot_start = datetime.strptime(f"{h:02d}:00", "%H:%M").time()
             slot_end = datetime.strptime(f"{h+1:02d}:00", "%H:%M").time() if h < 22 else datetime.strptime("23:59", "%H:%M").time()
             if in_t < slot_end and out_t > slot_start:
-                slots.append(f"{h:02d}:00")
+                slots.append(slot_str)
         return slots
 
     with tab1:
@@ -429,15 +468,17 @@ elif menu == "分析":
             selected_period = st.selectbox("集計対象を選択", month_options)
 
             target_df = df_ana if selected_period == "累計" else df_ana[df_ana['年月'] == selected_period]
-
+            
+            # 対象の月に応じてタイムスロットを切り替える
+            current_time_slots = get_time_slots_for_period(selected_period)
             weekdays = ["月", "火", "水", "木", "金", "土", "日"]
-            heatmap_data = pd.DataFrame(0, index=weekdays, columns=TIME_SLOTS)
+            heatmap_data = pd.DataFrame(0, index=weekdays, columns=current_time_slots)
 
             for _, row in target_df.iterrows():
                 if pd.isnull(row['日付']) or not row['入室時間'] or not row['退室時間']: continue
                 try:
                     wd = weekdays[pd.to_datetime(row['日付']).weekday()]
-                    for slot in get_active_slots(row['入室時間'], row['退室時間']):
+                    for slot in get_active_slots(row['入室時間'], row['退室時間'], current_time_slots):
                         heatmap_data.loc[wd, slot] += 1
                 except: continue
 
@@ -446,12 +487,12 @@ elif menu == "分析":
 
             html = "<div style='overflow-x: auto;'><table style='width:100%; border-collapse: collapse; margin-bottom: 20px; min-width: 600px;'>"
             html += "<tr><th style='border: 1px solid #CBD5E1; padding: 8px; background-color: #F8FAFC; color: #0A2B56; position: sticky; left: 0; z-index: 1;'>曜日</th>"
-            for tb in TIME_SLOTS: html += f"<th style='border: 1px solid #CBD5E1; padding: 8px; background-color: #F8FAFC; color: #0A2B56; font-size:0.8rem;'>{tb[:2]}時台</th>"
+            for tb in current_time_slots: html += f"<th style='border: 1px solid #CBD5E1; padding: 8px; background-color: #F8FAFC; color: #0A2B56; font-size:0.8rem;'>{tb[:2]}時台</th>"
             html += "</tr>"
 
             for wd in weekdays:
                 html += f"<tr><th style='border: 1px solid #CBD5E1; padding: 8px; background-color: #F8FAFC; color: #0A2B56; position: sticky; left: 0; z-index: 1;'>{wd}</th>"
-                for tb in TIME_SLOTS:
+                for tb in current_time_slots:
                     val = heatmap_data.loc[wd, tb]
                     ratio = val / max_val if max_val > 0 else 0
                     bg_color = f"rgba(0, 91, 171, {ratio * 0.8})" if val > 0 else "transparent"
@@ -505,14 +546,19 @@ elif menu == "分析":
             df_recent = df_ana[pd.to_datetime(df_ana['日付']) >= four_weeks_ago]
             
             if not df_recent.empty:
+                # 予測する来週が講習期間に含まれるかでスロットを変更
+                predict_period = jst_today + pd.Timedelta(days=7)
+                pred_period_str = predict_period.strftime('%Y年%m月')
+                pred_time_slots = get_time_slots_for_period(pred_period_str)
+                
                 weekdays = ["月", "火", "水", "木", "金", "土", "日"]
-                predict_data = pd.DataFrame(0.0, index=weekdays, columns=TIME_SLOTS)
+                predict_data = pd.DataFrame(0.0, index=weekdays, columns=pred_time_slots)
 
                 for _, row in df_recent.iterrows():
                     if pd.isnull(row['日付']) or not row['入室時間'] or not row['退室時間']: continue
                     try:
                         wd = weekdays[pd.to_datetime(row['日付']).weekday()]
-                        for slot in get_active_slots(row['入室時間'], row['退室時間']):
+                        for slot in get_active_slots(row['入室時間'], row['退室時間'], pred_time_slots):
                             predict_data.loc[wd, slot] += 0.25 # 4週平均
                     except: continue
 
@@ -521,12 +567,12 @@ elif menu == "分析":
 
                 html = "<div style='overflow-x: auto;'><table style='width:100%; border-collapse: collapse; margin-bottom: 20px; min-width: 600px;'>"
                 html += "<tr><th style='border: 1px solid #CBD5E1; padding: 8px; background-color: #F8FAFC; color: #0A2B56; position: sticky; left: 0; z-index: 1;'>曜日</th>"
-                for tb in TIME_SLOTS: html += f"<th style='border: 1px solid #CBD5E1; padding: 8px; background-color: #F8FAFC; color: #0A2B56; font-size:0.8rem;'>{tb[:2]}時台</th>"
+                for tb in pred_time_slots: html += f"<th style='border: 1px solid #CBD5E1; padding: 8px; background-color: #F8FAFC; color: #0A2B56; font-size:0.8rem;'>{tb[:2]}時台</th>"
                 html += "</tr>"
 
                 for wd in weekdays:
                     html += f"<tr><th style='border: 1px solid #CBD5E1; padding: 8px; background-color: #F8FAFC; color: #0A2B56; position: sticky; left: 0; z-index: 1;'>{wd}</th>"
-                    for tb in TIME_SLOTS:
+                    for tb in pred_time_slots:
                         val = predict_data.loc[wd, tb]
                         ratio = val / max_val if max_val > 0 else 0
                         bg_color = f"rgba(217, 119, 6, {ratio * 0.8})" if val > 0 else "transparent"
@@ -609,6 +655,7 @@ elif menu == "管理":
                         if edit_name_clean:
                             if edit_grade == "--選択--": st.error("学年を選択してください。")
                             elif edit_in is None or edit_out is None: st.error("開始と終了時間を正しく入力してください。")
+                            elif not is_special_period(edit_date) and edit_in.hour < 12: st.error("通常期間は12時以降を入力してください。")
                             else:
                                 duration = calc_duration(edit_in, edit_out)
                                 if duration <= 0: st.error("終了時間は開始時間以降に設定してください")
