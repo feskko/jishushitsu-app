@@ -125,11 +125,14 @@ def save_to_gs(df, sheet_name="メイン"):
 
 # 時間計算用の関数
 def calc_duration(in_time, out_time):
-    fmt = "%H:%M"
     def to_dt(t):
         if isinstance(t, str):
+            t = str(t).strip()
             if "コマ" in t: return None # 旧形式のデータは無視
-            try: return datetime.strptime(t[:5], fmt)
+            try:
+                parts = t.split(":")
+                if len(parts) >= 2:
+                    return datetime.combine(datetime.today(), datetime.strptime(f"{int(parts[0]):02d}:{int(parts[1]):02d}", "%H:%M").time())
             except: return None
         elif t is not None:
             return datetime.combine(datetime.today(), t)
@@ -149,7 +152,7 @@ def calc_duration(in_time, out_time):
 if "form_key" not in st.session_state: st.session_state.form_key = 0
 
 GRADES = ["--選択--"] + [f"小{i}" for i in range(1, 7)] + [f"中{i}" for i in range(1, 4)] + [f"高{i}" for i in range(1, 4)] + ["既卒/その他"]
-TIME_SLOTS = [f"{h:02d}:00" for h in range(13, 23)] # 13:00 - 22:00のヒートマップ用
+TIME_SLOTS = [f"{h:02d}:00" for h in range(9, 23)] # 09:00 - 22:00のヒートマップ用
 
 menu = st.radio("メニュー", ["一括入力", "1件ずつ", "ランキング", "分析", "管理"], horizontal=True, label_visibility="collapsed")
 
@@ -374,7 +377,7 @@ elif menu == "分析":
         
         col_met1, col_met2, col_met3 = st.columns(3)
         col_met1.metric("今月の総学習時間", f"{hours_this:.1f} 時間", f"{pct_hours:+.1f}% ({diff_hours:+.1f} 時間)")
-        col_met2.metric("今月の利用者数", f"{users_this} 名", f"{pct_users:+.1f}% ({diff_users:+.1} 名)")
+        col_met2.metric("今月の利用者数", f"{users_this} 名", f"{pct_users:+.1f}% ({diff_users:+d} 名)")
         if users_this > 0:
             avg_this = hours_this / users_this
             avg_last = hours_last / users_last if users_last > 0 else 0
@@ -389,18 +392,34 @@ elif menu == "分析":
     tab1, tab2, tab3 = st.tabs(["混雑状況", "生徒個別", "翌週の予測"])
 
     def get_active_slots(in_str, out_str):
-        if "コマ" in str(in_str) or "コマ" in str(out_str): return []
-        try:
-            in_t = datetime.strptime(str(in_str)[:5], "%H:%M").time()
-            out_t = datetime.strptime(str(out_str)[:5], "%H:%M").time()
-            slots = []
-            for h in range(13, 23):
-                slot_start = datetime.strptime(f"{h:02d}:00", "%H:%M").time()
-                slot_end = datetime.strptime(f"{h+1:02d}:00", "%H:%M").time() if h < 22 else datetime.strptime("23:59", "%H:%M").time()
-                if in_t < slot_end and out_t > slot_start:
-                    slots.append(f"{h:02d}:00")
-            return slots
-        except: return []
+        def parse_time(t_str):
+            t_str = str(t_str).strip()
+            if "コマ" in t_str:
+                # 過去のコマ表記を時間に変換（1コマ=13:00〜）
+                try:
+                    koma = int(t_str.replace("コマ", ""))
+                    hour = 13 + int((koma - 1) * 1.5)
+                    return datetime.strptime(f"{hour:02d}:00", "%H:%M").time()
+                except: return None
+            try:
+                parts = t_str.split(":")
+                if len(parts) >= 2:
+                    return datetime.strptime(f"{int(parts[0]):02d}:{int(parts[1]):02d}", "%H:%M").time()
+            except: pass
+            return None
+
+        in_t = parse_time(in_str)
+        out_t = parse_time(out_str)
+        
+        if not in_t or not out_t: return []
+        
+        slots = []
+        for h in range(9, 23):
+            slot_start = datetime.strptime(f"{h:02d}:00", "%H:%M").time()
+            slot_end = datetime.strptime(f"{h+1:02d}:00", "%H:%M").time() if h < 22 else datetime.strptime("23:59", "%H:%M").time()
+            if in_t < slot_end and out_t > slot_start:
+                slots.append(f"{h:02d}:00")
+        return slots
 
     with tab1:
         st.markdown("<div class='section-title'>曜日・時間帯別の混雑状況</div>", unsafe_allow_html=True)
@@ -571,7 +590,10 @@ elif menu == "管理":
                 
                 def parse_time_str(t_str):
                     if "コマ" in str(t_str): return None
-                    try: return datetime.strptime(str(t_str)[:5], "%H:%M").time()
+                    try:
+                        parts = str(t_str).split(":")
+                        if len(parts) >= 2:
+                            return datetime.strptime(f"{int(parts[0]):02d}:{int(parts[1]):02d}", "%H:%M").time()
                     except: return None
                     
                 col_in, col_out = st.columns(2)
