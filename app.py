@@ -25,6 +25,29 @@ def is_special_period(dt_date):
     if m == 12 or (m == 1 and d <= 7): return True
     return False
 
+# テスト期間の判定（予測用）
+def is_test_period(dt_date):
+    if dt_date is None: return False
+    m = dt_date.month
+    d = dt_date.day
+    # 5月中旬 (5/11〜5/20)
+    if m == 5 and 11 <= d <= 20: return True
+    # 6月下旬 (6/21〜6/30)
+    if m == 6 and 21 <= d <= 30: return True
+    # 7月上旬 (7/1〜7/10)
+    if m == 7 and 1 <= d <= 10: return True
+    # 9月上旬 (9/1〜9/10)
+    if m == 9 and 1 <= d <= 10: return True
+    # 10月中旬 (10/11〜10/20)
+    if m == 10 and 11 <= d <= 20: return True
+    # 11月上旬 (11/1〜11/10)
+    if m == 11 and 1 <= d <= 10: return True
+    # 12月上旬 (12/1〜12/10)
+    if m == 12 and 1 <= d <= 10: return True
+    # 2月下旬 (2/20〜2/29)
+    if m == 2 and d >= 20: return True
+    return False
+
 # 分析用のタイムスロット取得
 def get_time_slots_for_period(period_str):
     if period_str == "累計":
@@ -39,11 +62,13 @@ def get_time_slots_for_period(period_str):
     except:
         return [f"{h:02d}:00" for h in range(9, 23)]
 
-# 時刻の柔軟なパース (1223 -> 12:23)
+# 時刻の柔軟なパース (全角対応、1223 -> 12:23)
 def parse_custom_time(t_str):
     if not t_str: return None
-    t_str = str(t_str).strip()
+    # 全角数字を半角数字に変換し、空白を削除
+    t_str = unicodedata.normalize('NFKC', str(t_str)).strip()
     if t_str == "" or "コマ" in t_str: return None
+    
     if ":" in t_str:
         try: return datetime.strptime(t_str[:5], "%H:%M").time()
         except: return None
@@ -254,8 +279,8 @@ if menu == "一括入力":
         column_config={
             "氏名": st.column_config.TextColumn("氏名 (必須)", width="medium"),
             "学年": st.column_config.SelectboxColumn("学年 (同姓同名がいれば選択)", options=GRADES, width="medium"),
-            "開始時間": st.column_config.TextColumn("開始時間 (例:1223)", width="small"),
-            "終了時間": st.column_config.TextColumn("終了時間 (例:1530)", width="small"),
+            "開始時間": st.column_config.TextColumn("開始時間 (例:1223, 全角OK)", width="small"),
+            "終了時間": st.column_config.TextColumn("終了時間 (例:1530, 全角OK)", width="small"),
         },
         num_rows="dynamic",
         use_container_width=True,
@@ -344,7 +369,7 @@ elif menu == "1件ずつ":
         recent_users = df_history[['名前', '学年']].drop_duplicates(subset=['名前']).dropna()
         user_list += recent_users['名前'].tolist()
 
-    st.markdown("<p style='color:#3B82F6; font-weight:bold; margin-bottom:5px; font-size: 1.05rem;'> 過去の利用者から選ぶと自動入力されます</p>", unsafe_allow_html=True)
+    st.markdown("<p style='color:#3B82F6; font-weight:bold; margin-bottom:5px; font-size: 1.05rem;'>💡 過去の利用者から選ぶと自動入力されます</p>", unsafe_allow_html=True)
     selected_user = st.selectbox("過去の利用者検索", user_list, label_visibility="collapsed")
     
     if selected_user != "-- 新規入力 (直接入力してください) --":
@@ -373,9 +398,9 @@ elif menu == "1件ずつ":
 
     col_in, col_out = st.columns(2)
     with col_in:
-        in_time_str = st.text_input("開始時間 (必須)", value=default_in, placeholder="例: 1223")
+        in_time_str = st.text_input("開始時間 (必須)", value=default_in, placeholder="例: 1223 (全角数字もOK)")
     with col_out:
-        out_time_str = st.text_input("終了時間 (必須)", value=default_out, placeholder="例: 1530")
+        out_time_str = st.text_input("終了時間 (必須)", value=default_out, placeholder="例: 1530 (全角数字もOK)")
 
     st.markdown("<hr style='margin-top:20px; margin-bottom:20px;'>", unsafe_allow_html=True)
 
@@ -387,7 +412,7 @@ elif menu == "1件ずつ":
         out_time = parse_custom_time(out_time_str)
         
         if not f_name_clean: st.error("氏名を入力してください。")
-        elif in_time is None or out_time is None: st.error("開始時間と終了時間を正しく入力してください。(例: 1530)")
+        elif in_time is None or out_time is None: st.error("開始時間と終了時間を正しく入力してください。(例: 1530 または １５３０)")
         elif not is_special_period(f_date) and in_time.hour < 12: st.error("通常期間は12時以降を入力してください。")
         else:
             duration = calc_duration(in_time, out_time)
@@ -412,7 +437,7 @@ elif menu == "1件ずつ":
                     df = pd.concat([df, new_row], ignore_index=True)
                     save_to_gs(df)
                     st.session_state.form_key += 1 
-                    st.session_state.sys_msg = f"{f_name_clean}さんの記録を保存し、入力欄をリセットしました。"
+                    st.session_state.sys_msg = f"{f_name_clean}さんの記録（{in_str} 〜 {out_str}）を保存しました。"
                     st.cache_data.clear()
                     st.rerun()
 
@@ -518,7 +543,7 @@ elif menu == "分析":
         
         st.markdown(f"""
         <div style='background-color: #FFFFFF; border-left: 6px solid #F59E0B; padding: 20px; border-radius: 12px; margin-top: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.05);'>
-            <div style='font-weight: 900; color: #0F172A; margin-bottom: 8px; font-size: 1.2rem;'>翌月の着地予測</div>
+            <div style='font-weight: 900; color: #0F172A; margin-bottom: 8px; font-size: 1.2rem;'>🚀 AIによる翌月の着地予測</div>
             <div style='color: #475569; font-size: 1.05rem;'>
                 現在のペースと成長トレンドを考慮すると、来月は <b style='color: #B45309; font-size: 1.3rem;'>約 {next_month_h:.0f} 時間</b> の利用と、<b style='color: #B45309; font-size: 1.3rem;'>約 {int(next_month_u)} 名</b> の生徒の来室が見込まれます。
             </div>
@@ -641,29 +666,33 @@ elif menu == "分析":
         st.markdown("<div class='section-title'>来週の混雑予測（AI推計）</div>", unsafe_allow_html=True)
         st.markdown("<p style='color:#64748B; font-size:1rem; font-weight: bold;'>直近4週間（過去28日間）の実際の利用データを解析し、来週の各時間帯に平均して何人の生徒が来るかを推計しています。</p>", unsafe_allow_html=True)
         
+        predict_period = jst_today + pd.Timedelta(days=7)
+        is_next_week_test = is_test_period(predict_period)
+        
+        if is_next_week_test:
+            st.markdown("<div style='background-color: #FEF2F2; border-left: 5px solid #DC2626; padding: 15px; margin-bottom: 20px; border-radius: 8px;'><p style='color:#DC2626; font-weight:bold; margin:0;'>⚠️ 来週はテスト期間に該当するため、通常より混雑（約1.5倍）が予想されます。座席数（20席）を超える時間帯にご注意ください。</p></div>", unsafe_allow_html=True)
+
         if not df_ana.empty:
             four_weeks_ago = jst_today - pd.Timedelta(days=28)
             df_recent = df_ana[pd.to_datetime(df_ana['日付']) >= four_weeks_ago]
             
             if not df_recent.empty:
-                # 予測する来週が講習期間に含まれるかでスロットを変更
-                predict_period = jst_today + pd.Timedelta(days=7)
                 pred_period_str = predict_period.strftime('%Y年%m月')
                 pred_time_slots = get_time_slots_for_period(pred_period_str)
                 
                 weekdays = ["月", "火", "水", "木", "金", "土", "日"]
                 predict_data = pd.DataFrame(0.0, index=weekdays, columns=pred_time_slots)
 
+                # テスト期間なら予測人数を1.5倍に補正する
+                test_multiplier = 1.5 if is_next_week_test else 1.0
+
                 for _, row in df_recent.iterrows():
                     if pd.isnull(row['日付']) or not row['入室時間'] or not row['退室時間']: continue
                     try:
                         wd = weekdays[pd.to_datetime(row['日付']).weekday()]
                         for slot in get_active_slots(row['入室時間'], row['退室時間'], pred_time_slots):
-                            predict_data.loc[wd, slot] += 0.25 # 4週平均
+                            predict_data.loc[wd, slot] += 0.25 * test_multiplier # 4週平均 × 倍率
                     except: continue
-
-                max_val = predict_data.values.max()
-                max_val = max(max_val, 1)
 
                 html = "<div style='overflow-x: auto; background: white; padding: 15px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); border: 1px solid #E2E8F0;'><table style='width:100%; border-collapse: collapse; min-width: 600px;'>"
                 html += "<tr><th style='border: 1px solid #CBD5E1; padding: 10px; background-color: #F8FAFC; color: #0F172A; position: sticky; left: 0; z-index: 1;'>曜日</th>"
@@ -674,9 +703,28 @@ elif menu == "分析":
                     html += f"<tr><th style='border: 1px solid #CBD5E1; padding: 10px; background-color: #F8FAFC; color: #0F172A; position: sticky; left: 0; z-index: 1;'>{wd}</th>"
                     for tb in pred_time_slots:
                         val = predict_data.loc[wd, tb]
-                        ratio = val / max_val if max_val > 0 else 0
-                        bg_color = f"rgba(217, 119, 6, {ratio * 0.8})" if val > 0 else "transparent"
-                        font_color = "white" if ratio > 0.5 else "#1E293B"
+                        
+                        # 20席を基準としたヒートマップの色分け
+                        ratio = val / 20.0
+                        if ratio > 1.0: ratio = 1.0
+                        
+                        if val >= 20:
+                            # 満席超過レベル (濃い赤)
+                            bg_color = "rgba(220, 38, 38, 0.9)"
+                            font_color = "white"
+                        elif val >= 15:
+                            # 混雑警戒レベル (オレンジ)
+                            bg_color = f"rgba(234, 88, 12, {max(0.6, ratio)})"
+                            font_color = "white"
+                        elif val > 0:
+                            # 通常レベル (青)
+                            bg_color = f"rgba(37, 99, 235, {ratio * 0.8})"
+                            font_color = "white" if ratio > 0.4 else "#1E293B"
+                        else:
+                            # 空席
+                            bg_color = "transparent"
+                            font_color = "#1E293B"
+                            
                         display_val = f"{val:.1f}人" if val > 0 else "-"
                         html += f"<td style='border: 1px solid #CBD5E1; padding: 10px; text-align: center; font-size:0.85rem; font-weight: bold; background-color: {bg_color}; color: {font_color};'>{display_val}</td>"
                     html += "</tr>"
@@ -736,8 +784,8 @@ elif menu == "管理":
                     edit_grade = st.selectbox("学年 (同姓同名がいる場合のみ)", GRADES, index=g_index)
                     
                 col_in, col_out = st.columns(2)
-                with col_in: edit_in_str = st.text_input("開始時間 (例: 1223)", value=str(target_row['入室時間']).replace(":", ""), placeholder="例: 1223")
-                with col_out: edit_out_str = st.text_input("終了時間 (例: 1530)", value=str(target_row['退室時間']).replace(":", ""), placeholder="例: 1530")
+                with col_in: edit_in_str = st.text_input("開始時間 (例: 1223, 全角OK)", value=str(target_row['入室時間']).replace(":", ""), placeholder="例: 1223")
+                with col_out: edit_out_str = st.text_input("終了時間 (例: 1530, 全角OK)", value=str(target_row['退室時間']).replace(":", ""), placeholder="例: 1530")
                 
                 st.markdown("<br>", unsafe_allow_html=True)
                 col_btn1, col_btn2 = st.columns(2)
