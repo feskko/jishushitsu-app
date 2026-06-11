@@ -97,45 +97,61 @@ if os.path.exists("icon.png"):
 
 st.markdown("""
 <style>
+    /* 不要なメニューやヘッダーを隠す */
     #MainMenu, header, footer, [data-testid="stToolbar"] {visibility: hidden !important; display: none !important;}
-    .stApp { background-color: #F4F7FB; font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', Meiryo, sans-serif; }
-    .main-title { font-weight: 900; color: #0A2B56; letter-spacing: 2px; margin-bottom: 25px; padding-bottom: 10px; border-bottom: 3px solid #E2E8F0; position: relative; }
-    .main-title::after { content: ''; position: absolute; left: 0; bottom: -3px; width: 100px; height: 3px; background: linear-gradient(90deg, #0A2B56, #005BAB); }
-    .section-title { font-weight: 800; color: #0A2B56; margin-top: 2rem; margin-bottom: 1rem; padding-left: 10px; border-left: 5px solid #005BAB; display: flex; align-items: center; gap: 8px; }
     
-    div[role="radiogroup"] { display: flex; background-color: #FFFFFF; padding: 5px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); margin-bottom: 20px; margin-top: 5px; }
-    div[role="radiogroup"] label { flex: 1; text-align: center; justify-content: center; padding: 10px 5px !important; margin: 0 !important; border-radius: 8px; transition: 0.2s; cursor: pointer; }
-    div[role="radiogroup"] label[data-checked="true"] { background-color: #0A2B56; }
-    div[role="radiogroup"] label[data-checked="true"] p { color: #FFFFFF !important; font-weight: 800; }
-    div[role="radiogroup"] label p { color: #64748B; font-weight: 700; font-size: 0.85rem; }
+    /* 画面全体の背景色（明るいグレーでリッチに） */
+    .stApp { background-color: #F8FAFC; font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', Meiryo, sans-serif; }
+    
+    /* タイトルのデザイン */
+    .main-title { font-weight: 900; color: #0F172A; letter-spacing: 1px; margin-bottom: 30px; padding-bottom: 12px; border-bottom: 4px solid #E2E8F0; position: relative; font-size: 2.2rem; text-transform: uppercase;}
+    .main-title::after { content: ''; position: absolute; left: 0; bottom: -4px; width: 120px; height: 4px; background: linear-gradient(90deg, #2563EB, #1D4ED8); border-radius: 2px;}
+    .section-title { font-weight: 800; color: #1E293B; margin-top: 2.5rem; margin-bottom: 1.5rem; padding-left: 12px; border-left: 6px solid #3B82F6; font-size: 1.5rem; }
+    
+    /* 入力エリアをカード風に（立体感） */
+    div[data-testid="stVerticalBlock"] > div[style*="flex-direction: column"] {
+        background-color: #FFFFFF;
+        padding: 20px;
+        border-radius: 12px;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+        border: 1px solid #E2E8F0;
+        margin-bottom: 20px;
+    }
 
-    div[data-baseweb="input"] > div, div[data-baseweb="select"] > div { background-color: #FFFFFF !important; border-radius: 8px !important; border: 1px solid #CBD5E1 !important; box-shadow: inset 0 1px 2px rgba(0,0,0,0.02); }
-    div[data-baseweb="input"] input, div[data-baseweb="select"] div { color: #1E293B !important; font-weight: 700; font-size: 1.05rem; }
-    
-    button[kind="secondary"] { background-color: #FFFFFF !important; color: #0A2B56 !important; border: 2px solid #E2E8F0 !important; font-weight: 700 !important; border-radius: 6px !important; transition: 0.2s !important; min-height: 3.5rem !important; padding: 2px !important; }
-    button[kind="secondary"]:hover { border-color: #005BAB !important; background-color: #F8FAFC !important; }
-    
-    button[kind="primary"] { background: linear-gradient(135deg, #0A2B56 0%, #005BAB 100%) !important; color: #FFFFFF !important; border: none !important; font-weight: 800 !important; border-radius: 6px !important; box-shadow: 0 4px 6px -1px rgba(0, 91, 171, 0.3) !important; min-height: 3.5rem !important; padding: 2px !important; transition: all 0.2s ease; }
-    button[kind="primary"]:active { transform: translateY(2px); }
-    button p { font-size: 1.3rem !important; margin: 0 !important; font-weight: bold; }
+    /* ラジオボタン（メニュー）のデザイン */
+    div[role="radiogroup"] { display: flex; background-color: #F1F5F9; padding: 6px; border-radius: 12px; box-shadow: inset 0 2px 4px rgba(0,0,0,0.05); margin-bottom: 30px; }
+    div[role="radiogroup"] label { flex: 1; text-align: center; justify-content: center; padding: 12px 5px !important; margin: 0 !important; border-radius: 8px; transition: all 0.2s ease; cursor: pointer; }
+    div[role="radiogroup"] label[data-checked="true"] { background-color: #FFFFFF; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+    div[role="radiogroup"] label[data-checked="true"] p { color: #1D4ED8 !important; font-weight: 900; }
+    div[role="radiogroup"] label p { color: #64748B; font-weight: 700; font-size: 0.9rem; }
 
-    /* 入力フォームのラベルを濃い紺色にして見やすくする */
-    div[data-testid="stWidgetLabel"] p, div[data-testid="stWidgetLabel"] label { color: #0A2B56 !important; font-weight: 800 !important; font-size: 1.05rem !important; }
-    div[data-testid="stForm"] div[data-testid="stWidgetLabel"] p { color: #0A2B56 !important; }
+    /* 入力フォームのラベル（文字）を濃くして見やすくする */
+    div[data-testid="stWidgetLabel"] p, div[data-testid="stWidgetLabel"] label { color: #0F172A !important; font-weight: 800 !important; font-size: 1rem !important; }
+    
+    /* 入力ボックス本体のデザイン */
+    div[data-baseweb="input"] > div, div[data-baseweb="select"] > div { background-color: #F8FAFC !important; border-radius: 8px !important; border: 2px solid #E2E8F0 !important; transition: border-color 0.2s ease; }
+    div[data-baseweb="input"] > div:focus-within, div[data-baseweb="select"] > div:focus-within { border-color: #3B82F6 !important; background-color: #FFFFFF !important; box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2) !important;}
+    div[data-baseweb="input"] input, div[data-baseweb="select"] div { color: #0F172A !important; font-weight: 700; font-size: 1.1rem; }
+    div[data-baseweb="input"] input::placeholder { color: #94A3B8 !important; font-weight: 500; }
+    
+    /* ボタンのデザイン */
+    button[kind="secondary"] { background-color: #FFFFFF !important; color: #1E293B !important; border: 2px solid #CBD5E1 !important; font-weight: 700 !important; border-radius: 8px !important; transition: all 0.2s ease !important; min-height: 3.5rem !important; }
+    button[kind="secondary"]:hover { border-color: #64748B !important; background-color: #F1F5F9 !important; }
+    
+    button[kind="primary"] { background: linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%) !important; color: #FFFFFF !important; border: none !important; font-weight: 800 !important; border-radius: 8px !important; box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.4) !important; min-height: 4rem !important; transition: all 0.2s ease; }
+    button[kind="primary"]:hover { transform: translateY(-2px); box-shadow: 0 6px 8px -1px rgba(37, 99, 235, 0.5) !important; }
+    button[kind="primary"]:active { transform: translateY(1px); }
+    button p { font-size: 1.2rem !important; margin: 0 !important; letter-spacing: 1px; }
 
     /* メトリクス（パフォーマンスサマリー）を見やすくするCSS */
-    div[data-testid="stMetric"] { background-color: #FFFFFF; border: 1px solid #CBD5E1; border-radius: 12px; padding: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
-    [data-testid="stMetricValue"] > div, [data-testid="stMetricValue"] { color: #0A2B56 !important; font-weight: 900 !important; font-size: 2.4rem !important; }
-    [data-testid="stMetricLabel"] p, [data-testid="stMetricLabel"] { color: #475569 !important; font-size: 1.05rem !important; font-weight: bold !important; }
+    div[data-testid="stMetric"] { background-color: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 12px; padding: 20px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); }
+    [data-testid="stMetricValue"] > div, [data-testid="stMetricValue"] { color: #0F172A !important; font-weight: 900 !important; font-size: 2.6rem !important; }
+    [data-testid="stMetricLabel"] p, [data-testid="stMetricLabel"] { color: #64748B !important; font-size: 1.1rem !important; font-weight: 800 !important; }
 
-    @media (min-width: 768px) { 
-        .main-title { font-size: 2.4rem; } .section-title { font-size: 1.6rem; } div[role="radiogroup"] { max-width: 600px; } .rank-card { flex: 1; min-width: 30%; padding: 25px; border-radius: 16px; border: 1px solid #E2E8F0; } div[data-baseweb="input"] > div, div[data-baseweb="select"] > div { height: 3.2rem; }
-    }
     @media (max-width: 767px) { 
         .main-title { font-size: 1.8rem; } .section-title { font-size: 1.3rem; } 
         div[role="radiogroup"] { width: 100%; flex-wrap: wrap; } div[role="radiogroup"] label { min-width: 45%; } 
-        .rank-card { width: 100%; padding: 20px; border-radius: 12px; margin-bottom: 15px; border: 1px solid #E2E8F0; } 
-        div[data-baseweb="input"] > div, div[data-baseweb="select"] > div { height: 3.5rem; } 
+        div[data-testid="stVerticalBlock"] > div[style*="flex-direction: column"] { padding: 15px; }
     }
 </style>
 """, unsafe_allow_html=True)
@@ -149,10 +165,11 @@ if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
 
 if not st.session_state.authenticated:
-    st.markdown("<h3 style='text-align: center; color: #0A2B56; margin-top: 15vh; margin-bottom: 20px; font-weight: 900; font-size: 2rem;'>Study Room System</h3>", unsafe_allow_html=True)
+    st.markdown("<h3 style='text-align: center; color: #0F172A; margin-top: 15vh; margin-bottom: 30px; font-weight: 900; font-size: 2.5rem; letter-spacing: 2px;'>Study Room System</h3>", unsafe_allow_html=True)
     with st.form("login_form", clear_on_submit=False):
-        pwd = st.text_input("🔑 管理用パスワードを入力してください", type="password", placeholder="パスワードを入力")
-        submitted = st.form_submit_button("ロック解除", type="primary", use_container_width=True)
+        pwd = st.text_input("🔑 管理用パスワードを入力してください", type="password", placeholder="例: password123")
+        st.markdown("<br>", unsafe_allow_html=True)
+        submitted = st.form_submit_button("システムにログイン", type="primary", use_container_width=True)
         if submitted:
             if pwd == APP_PASSWORD:
                 st.session_state.authenticated = True
@@ -219,11 +236,13 @@ if menu == "一括入力":
         
     df_empty = pd.DataFrame(st.session_state.batch_data)
     
+    st.markdown("<p style='color:#64748B; font-weight:bold; margin-bottom:10px;'>💡 同姓同名がいない場合は、学年は「--選択--」のままでも登録可能です。</p>", unsafe_allow_html=True)
+    
     edited_df = st.data_editor(
         df_empty,
         column_config={
-            "氏名": st.column_config.TextColumn("氏名", width="medium"),
-            "学年": st.column_config.SelectboxColumn("学年", options=GRADES, width="small"),
+            "氏名": st.column_config.TextColumn("氏名 (必須)", width="medium"),
+            "学年": st.column_config.SelectboxColumn("学年 (同姓同名がいれば選択)", options=GRADES, width="medium"),
             "開始時間": st.column_config.TextColumn("開始時間 (例:1223)", width="small"),
             "終了時間": st.column_config.TextColumn("終了時間 (例:1530)", width="small"),
         },
@@ -244,11 +263,8 @@ if menu == "一括入力":
             
             for idx, row in valid_rows.iterrows():
                 name = row["氏名"].replace(" ", "").replace("　", "")
-                grade = row["学年"]
-                
-                if grade == "--選択--":
-                    error_msgs.append(f"{name}さん (学年が選択されていません)")
-                    continue
+                grade_input = row["学年"]
+                grade = grade_input if grade_input != "--選択--" else "" # 学年未選択は空文字として扱う
                 
                 in_dt_time = parse_custom_time(row["開始時間"])
                 out_dt_time = parse_custom_time(row["終了時間"])
@@ -270,15 +286,15 @@ if menu == "一括入力":
                 in_str = in_dt_time.strftime("%H:%M")
                 out_str = out_dt_time.strftime("%H:%M")
                 
+                # 同一人物・同一時間のチェック
                 is_dup_current = not df_current[
                     (df_current['日付'] == pd.to_datetime(f_date_batch)) & 
                     (df_current['名前'] == name) & 
-                    (df_current['学年'] == grade) & 
                     (df_current['入室時間'] == in_str) & 
                     (df_current['退室時間'] == out_str)
                 ].empty
                 
-                is_dup_new = any(r['名前'] == name and r['学年'] == grade and r['入室時間'] == in_str and r['退室時間'] == out_str for r in new_records)
+                is_dup_new = any(r['名前'] == name and r['入室時間'] == in_str and r['退室時間'] == out_str for r in new_records)
                 
                 if is_dup_current or is_dup_new:
                     error_msgs.append(f"{name}さん (既に同じ記録が登録されています)")
@@ -317,48 +333,53 @@ elif menu == "1件ずつ":
         recent_users = df_history[['名前', '学年']].drop_duplicates(subset=['名前']).dropna()
         user_list += recent_users['名前'].tolist()
 
-    st.markdown("<p style='color:#475569; font-weight:bold; margin-bottom:5px;'>💡 過去の利用者から選ぶと自動入力されます</p>", unsafe_allow_html=True)
-    selected_user = st.selectbox("過去の利用者", user_list, label_visibility="collapsed")
+    st.markdown("<p style='color:#3B82F6; font-weight:bold; margin-bottom:5px; font-size: 1.05rem;'>💡 過去の利用者から選ぶと自動入力されます</p>", unsafe_allow_html=True)
+    selected_user = st.selectbox("過去の利用者検索", user_list, label_visibility="collapsed")
     
     if selected_user != "-- 新規入力 (直接入力してください) --":
         default_name = selected_user
         try:
             default_grade = recent_users[recent_users['名前'] == selected_user]['学年'].values[0]
+            if not default_grade: default_grade = "--選択--"
         except:
             default_grade = "--選択--"
     else:
         default_name = ""
         default_grade = "--選択--"
 
-    col1, col2 = st.columns([1, 1])
-    with col1: f_date = st.date_input("利用日", jst_now.date(), max_value=jst_now.date())
-    with col2: 
-        g_index = GRADES.index(default_grade) if default_grade in GRADES else 0
-        f_grade = st.selectbox("学年", GRADES, index=g_index)
-        
-    k_name = f"name_{st.session_state.form_key}"
-    f_name = st.text_input("氏名", value=default_name, key=k_name)
+    # フォームを視覚的にグループ化するためのコンテナ設定
+    with st.container():
+        st.markdown("<div style='background: white; padding: 25px; border-radius: 12px; border: 1px solid #E2E8F0; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);'>", unsafe_allow_html=True)
+        col1, col2 = st.columns([1, 1])
+        with col1: f_date = st.date_input("利用日", jst_now.date(), max_value=jst_now.date())
+        with col2: 
+            g_index = GRADES.index(default_grade) if default_grade in GRADES else 0
+            f_grade = st.selectbox("学年 (※同姓同名がいる場合のみ選択)", GRADES, index=g_index)
+            
+        k_name = f"name_{st.session_state.form_key}"
+        f_name = st.text_input("氏名 (必須)", value=default_name, key=k_name, placeholder="例: 山田太郎")
 
-    # デフォルトで開始時間を1時間前、終了時間を現在時刻にセット
-    default_in = (jst_now - timedelta(hours=1)).strftime("%H%M")
-    default_out = jst_now.strftime("%H%M")
+        # デフォルトで開始時間を1時間前、終了時間を現在時刻にセット
+        default_in = (jst_now - timedelta(hours=1)).strftime("%H%M")
+        default_out = jst_now.strftime("%H%M")
 
-    col_in, col_out = st.columns(2)
-    with col_in:
-        in_time_str = st.text_input("開始時間 (例: 1223)", value=default_in)
-    with col_out:
-        out_time_str = st.text_input("終了時間 (例: 1530)", value=default_out)
+        col_in, col_out = st.columns(2)
+        with col_in:
+            in_time_str = st.text_input("開始時間 (必須)", value=default_in, placeholder="例: 1223")
+        with col_out:
+            out_time_str = st.text_input("終了時間 (必須)", value=default_out, placeholder="例: 1530")
+        st.markdown("</div>", unsafe_allow_html=True)
 
-    st.markdown("<hr style='margin-top:20px; margin-bottom:20px;'>", unsafe_allow_html=True)
+    st.markdown("<br>", unsafe_allow_html=True)
 
-    if st.button("1件記録する", use_container_width=True, type="primary"):
+    if st.button("この内容で1件記録する", use_container_width=True, type="primary"):
         f_name_clean = f_name.replace(" ", "").replace("　", "")
+        grade_to_save = f_grade if f_grade != "--選択--" else "" # 学年未選択を許容
         
         in_time = parse_custom_time(in_time_str)
         out_time = parse_custom_time(out_time_str)
         
         if not f_name_clean: st.error("氏名を入力してください。")
-        elif f_grade == "--選択--": st.error("学年を選択してください。")
         elif in_time is None or out_time is None: st.error("開始時間と終了時間を正しく入力してください。(例: 1530)")
         elif not is_special_period(f_date) and in_time.hour < 12: st.error("通常期間は12時以降を入力してください。")
         else:
@@ -373,7 +394,6 @@ elif menu == "1件ずつ":
                 is_dup = not df[
                     (df['日付'] == pd.to_datetime(f_date)) & 
                     (df['名前'] == f_name_clean) & 
-                    (df['学年'] == f_grade) & 
                     (df['入室時間'] == in_str) & 
                     (df['退室時間'] == out_str)
                 ].empty
@@ -381,7 +401,7 @@ elif menu == "1件ずつ":
                 if is_dup:
                     st.error("この記録は既に登録されています（重複エラー）。")
                 else:
-                    new_row = pd.DataFrame([{'日付': pd.to_datetime(f_date), '名前': f_name_clean, '学年': f_grade, '入室時間': in_str, '退室時間': out_str, '利用時間（時間）': duration}])
+                    new_row = pd.DataFrame([{'日付': pd.to_datetime(f_date), '名前': f_name_clean, '学年': grade_to_save, '入室時間': in_str, '退室時間': out_str, '利用時間（時間）': duration}])
                     df = pd.concat([df, new_row], ignore_index=True)
                     save_to_gs(df)
                     st.session_state.form_key += 1 
@@ -398,16 +418,20 @@ elif menu == "ランキング":
         html = '<div style="display: flex; gap: 20px; margin-bottom: 20px; flex-wrap: wrap;">'
         top_rows = agg[agg['順位'] <= 3]
         for i, row in top_rows.iterrows():
-            rank_val, name, grade, time_val = row['順位'], row['名前'], row['学年'], row['利用時間（時間）']
-            if rank_val == 1: rank_text, icon, border_color, bg_grad = "1st", "", "#C9B037", "linear-gradient(135deg, #FFFFFF 0%, #FFFDF0 100%)"
-            elif rank_val == 2: rank_text, icon, border_color, bg_grad = "2nd", "", "#B4B4B4", "linear-gradient(135deg, #FFFFFF 0%, #F8F9FA 100%)"
-            elif rank_val == 3: rank_text, icon, border_color, bg_grad = "3rd", "", "#AD8A56", "linear-gradient(135deg, #FFFFFF 0%, #FCF9F5 100%)"
-            else: rank_text, icon, border_color, bg_grad = f"{rank_val}th", "", "#64748B", "linear-gradient(135deg, #FFFFFF 0%, #F8FAFC 100%)"
-            html += f"<div class='rank-card' style='background: {bg_grad}; border-top: 5px solid {border_color};'><div style='display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;'><span style='font-size: 1rem; color: #64748B; font-weight: 800; letter-spacing: 1px;'>{rank_text} PLACE</span><span style='font-size: 1.5rem;'>{icon}</span></div><div style='font-size: 0.9rem; color: #0A2B56; font-weight: bold; margin-bottom: 5px;'>{grade}</div><div style='font-size: 2.2rem; font-weight: 900; color: #0F172A; margin-bottom: 15px;'>{name} <span style='font-size: 1rem; font-weight: 600; color: #64748B;'>さん</span></div><div style='display: inline-block; background-color: #F1F5F9; color: #0A2B56; padding: 6px 16px; border-radius: 8px; font-weight: 800; font-size: 1.2rem; border: 1px solid #E2E8F0;'>{time_val:.1f} <span style='font-size: 0.9rem;'>HOURS</span></div></div>"
+            rank_val, name, time_val = row['順位'], row['名前'], row['利用時間（時間）']
+            # 学年が空なら表示しないよう調整
+            grade_disp = row['学年'] if pd.notnull(row['学年']) and row['学年'] != "" else "学年未設定"
+            
+            if rank_val == 1: rank_text, icon, border_color, bg_grad = "1st", "", "#F59E0B", "linear-gradient(135deg, #FFFFFF 0%, #FFFBEB 100%)"
+            elif rank_val == 2: rank_text, icon, border_color, bg_grad = "2nd", "", "#94A3B8", "linear-gradient(135deg, #FFFFFF 0%, #F8FAFC 100%)"
+            elif rank_val == 3: rank_text, icon, border_color, bg_grad = "3rd", "", "#B45309", "linear-gradient(135deg, #FFFFFF 0%, #FFF7ED 100%)"
+            else: rank_text, icon, border_color, bg_grad = f"{rank_val}th", "", "#64748B", "linear-gradient(135deg, #FFFFFF 0%, #F1F5F9 100%)"
+            html += f"<div class='rank-card' style='background: {bg_grad}; border-top: 5px solid {border_color}; box-shadow: 0 4px 6px rgba(0,0,0,0.05);'><div style='display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;'><span style='font-size: 1.1rem; color: #475569; font-weight: 900; letter-spacing: 1px;'>{rank_text} PLACE</span><span style='font-size: 1.5rem;'>{icon}</span></div><div style='font-size: 0.9rem; color: #64748B; font-weight: bold; margin-bottom: 5px;'>{grade_disp}</div><div style='font-size: 2.2rem; font-weight: 900; color: #0F172A; margin-bottom: 15px;'>{name} <span style='font-size: 1rem; font-weight: 600; color: #64748B;'>さん</span></div><div style='display: inline-block; background-color: #FFFFFF; color: #1D4ED8; padding: 6px 16px; border-radius: 8px; font-weight: 900; font-size: 1.2rem; border: 1px solid #BFDBFE;'>{time_val:.1f} <span style='font-size: 0.9rem;'>HOURS</span></div></div>"
         html += '</div>'
         st.markdown(html, unsafe_allow_html=True)
 
     def render_section_ranking(full_agg, target_grades, section_title):
+        # ターゲット学年が空文字 ("") のものも、便宜上どこかに含めるか、今回はターゲット学年に一致するものだけ抽出
         section_df = full_agg[full_agg['学年'].isin(target_grades)].reset_index(drop=True)
         st.markdown(f"<div class='section-title'>{section_title}</div>", unsafe_allow_html=True)
         if section_df.empty: st.info("集計データがありません。"); return
@@ -422,6 +446,8 @@ elif menu == "ランキング":
         tab1, tab2, tab3 = st.tabs(["今月の集計", "直近3ヶ月", "累計"])
         def get_agg(target_df):
             if target_df.empty: return pd.DataFrame()
+            # 名前だけで集計するように変更。学年はその人の最新（または任意）のものを拾う
+            # 同姓同名対応として、一応「名前」と「学年」の組み合わせでグループ化は維持するが、学年が空文字の場合は別グループになる
             return target_df.groupby(['名前', '学年'])['利用時間（時間）'].sum().reset_index().sort_values(by='利用時間（時間）', ascending=False).reset_index(drop=True)
 
         jst_today = pd.Timestamp(jst_now.date())
@@ -431,9 +457,10 @@ elif menu == "ランキング":
             with tab:
                 if agg_data.empty: st.info("データがありません。")
                 else:
+                    # 学年未設定("") は便宜上高校生・その他に含める
                     render_section_ranking(agg_data, [f"小{i}" for i in range(1, 7)], "小学生の部")
                     render_section_ranking(agg_data, [f"中{i}" for i in range(1, 4)], "中学生の部")
-                    render_section_ranking(agg_data, [f"高{i}" for i in range(1, 4)] + ["既卒/その他"], "高校生・その他")
+                    render_section_ranking(agg_data, [f"高{i}" for i in range(1, 4)] + ["既卒/その他", ""], "高校生・その他・学年未設定")
     else: st.info("データがありません。最初の記録を登録してください。")
 
 elif menu == "分析":
@@ -483,10 +510,10 @@ elif menu == "分析":
         next_month_u = users_this * (1 + max(min((pct_users / 100.0), 0.1), -0.1))
         
         st.markdown(f"""
-        <div style='background-color: #FFFFFF; border-left: 5px solid #F59E0B; padding: 15px 20px; border-radius: 8px; margin-top: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);'>
-            <div style='font-weight: 900; color: #0A2B56; margin-bottom: 5px; font-size: 1.1rem;'>🚀 AIによる翌月の着地予測</div>
-            <div style='color: #475569; font-size: 1rem;'>
-                現在のペースと成長トレンドを考慮すると、来月は <b>約 {next_month_h:.0f} 時間</b> の利用と、<b>約 {int(next_month_u)} 名</b> の生徒の来室が見込まれます。
+        <div style='background-color: #FFFFFF; border-left: 6px solid #F59E0B; padding: 20px; border-radius: 12px; margin-top: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.05);'>
+            <div style='font-weight: 900; color: #0F172A; margin-bottom: 8px; font-size: 1.2rem;'>🚀 AIによる翌月の着地予測</div>
+            <div style='color: #475569; font-size: 1.05rem;'>
+                現在のペースと成長トレンドを考慮すると、来月は <b style='color: #B45309; font-size: 1.3rem;'>約 {next_month_h:.0f} 時間</b> の利用と、<b style='color: #B45309; font-size: 1.3rem;'>約 {int(next_month_u)} 名</b> の生徒の来室が見込まれます。
             </div>
         </div>
         """, unsafe_allow_html=True)
@@ -551,19 +578,19 @@ elif menu == "分析":
             max_val = heatmap_data.values.max()
             max_val = max(max_val, 1)
 
-            html = "<div style='overflow-x: auto;'><table style='width:100%; border-collapse: collapse; margin-bottom: 20px; min-width: 600px;'>"
-            html += "<tr><th style='border: 1px solid #CBD5E1; padding: 8px; background-color: #F8FAFC; color: #0A2B56; position: sticky; left: 0; z-index: 1;'>曜日</th>"
-            for tb in current_time_slots: html += f"<th style='border: 1px solid #CBD5E1; padding: 8px; background-color: #F8FAFC; color: #0A2B56; font-size:0.8rem;'>{tb[:2]}時台</th>"
+            html = "<div style='overflow-x: auto; background: white; padding: 15px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); border: 1px solid #E2E8F0;'><table style='width:100%; border-collapse: collapse; min-width: 600px;'>"
+            html += "<tr><th style='border: 1px solid #CBD5E1; padding: 10px; background-color: #F8FAFC; color: #0F172A; position: sticky; left: 0; z-index: 1;'>曜日</th>"
+            for tb in current_time_slots: html += f"<th style='border: 1px solid #CBD5E1; padding: 10px; background-color: #F8FAFC; color: #0F172A; font-size:0.85rem;'>{tb[:2]}時台</th>"
             html += "</tr>"
 
             for wd in weekdays:
-                html += f"<tr><th style='border: 1px solid #CBD5E1; padding: 8px; background-color: #F8FAFC; color: #0A2B56; position: sticky; left: 0; z-index: 1;'>{wd}</th>"
+                html += f"<tr><th style='border: 1px solid #CBD5E1; padding: 10px; background-color: #F8FAFC; color: #0F172A; position: sticky; left: 0; z-index: 1;'>{wd}</th>"
                 for tb in current_time_slots:
                     val = heatmap_data.loc[wd, tb]
                     ratio = val / max_val if max_val > 0 else 0
-                    bg_color = f"rgba(0, 91, 171, {ratio * 0.8})" if val > 0 else "transparent"
+                    bg_color = f"rgba(37, 99, 235, {ratio * 0.8})" if val > 0 else "transparent"
                     font_color = "white" if ratio > 0.5 else "#1E293B"
-                    html += f"<td style='border: 1px solid #CBD5E1; padding: 8px; text-align: center; font-weight: bold; background-color: {bg_color}; color: {font_color};'>{val}</td>"
+                    html += f"<td style='border: 1px solid #CBD5E1; padding: 10px; text-align: center; font-weight: bold; background-color: {bg_color}; color: {font_color};'>{val}</td>"
                 html += "</tr>"
             html += "</table></div>"
             st.markdown(html, unsafe_allow_html=True)
@@ -586,7 +613,7 @@ elif menu == "分析":
                     sm_df = student_df[student_df['日付'] >= this_month]
                     total_h = sm_df['利用時間（時間）'].sum()
 
-                    st.markdown(f"<div style='background: linear-gradient(135deg, #0A2B56 0%, #005BAB 100%); padding: 20px; border-radius: 12px; color: white; margin-bottom: 20px; box-shadow: 0 4px 6px -1px rgba(0, 91, 171, 0.3);'><h4 style='margin:0; font-size: 1.1rem; font-weight: normal;'>{selected_name} さんの今月の学習時間</h4><div style='font-size: 2.8rem; font-weight: 900; margin-top: 5px;'>{total_h:.1f} <span style='font-size: 1.2rem; font-weight: bold;'>時間</span></div></div>", unsafe_allow_html=True)
+                    st.markdown(f"<div style='background: linear-gradient(135deg, #1E293B 0%, #0F172A 100%); padding: 25px; border-radius: 12px; color: white; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);'><h4 style='margin:0; font-size: 1.1rem; color: #94A3B8; font-weight: bold;'>{selected_name} さんの今月の学習時間</h4><div style='font-size: 3rem; font-weight: 900; margin-top: 5px; color: #FFFFFF;'>{total_h:.1f} <span style='font-size: 1.2rem; font-weight: bold; color: #94A3B8;'>時間</span></div></div>", unsafe_allow_html=True)
 
                     st.markdown("##### 日別の学習推移（今月）")
                     if not sm_df.empty:
@@ -605,7 +632,7 @@ elif menu == "分析":
 
     with tab3:
         st.markdown("<div class='section-title'>来週の混雑予測（AI推計）</div>", unsafe_allow_html=True)
-        st.markdown("<p style='color:#475569; font-size:0.95rem;'>直近4週間（過去28日間）の実際の利用データを解析し、来週の各時間帯に平均して何人の生徒が来るかを推計しています。</p>", unsafe_allow_html=True)
+        st.markdown("<p style='color:#64748B; font-size:1rem; font-weight: bold;'>直近4週間（過去28日間）の実際の利用データを解析し、来週の各時間帯に平均して何人の生徒が来るかを推計しています。</p>", unsafe_allow_html=True)
         
         if not df_ana.empty:
             four_weeks_ago = jst_today - pd.Timedelta(days=28)
@@ -631,20 +658,20 @@ elif menu == "分析":
                 max_val = predict_data.values.max()
                 max_val = max(max_val, 1)
 
-                html = "<div style='overflow-x: auto;'><table style='width:100%; border-collapse: collapse; margin-bottom: 20px; min-width: 600px;'>"
-                html += "<tr><th style='border: 1px solid #CBD5E1; padding: 8px; background-color: #F8FAFC; color: #0A2B56; position: sticky; left: 0; z-index: 1;'>曜日</th>"
-                for tb in pred_time_slots: html += f"<th style='border: 1px solid #CBD5E1; padding: 8px; background-color: #F8FAFC; color: #0A2B56; font-size:0.8rem;'>{tb[:2]}時台</th>"
+                html = "<div style='overflow-x: auto; background: white; padding: 15px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); border: 1px solid #E2E8F0;'><table style='width:100%; border-collapse: collapse; min-width: 600px;'>"
+                html += "<tr><th style='border: 1px solid #CBD5E1; padding: 10px; background-color: #F8FAFC; color: #0F172A; position: sticky; left: 0; z-index: 1;'>曜日</th>"
+                for tb in pred_time_slots: html += f"<th style='border: 1px solid #CBD5E1; padding: 10px; background-color: #F8FAFC; color: #0F172A; font-size:0.85rem;'>{tb[:2]}時台</th>"
                 html += "</tr>"
 
                 for wd in weekdays:
-                    html += f"<tr><th style='border: 1px solid #CBD5E1; padding: 8px; background-color: #F8FAFC; color: #0A2B56; position: sticky; left: 0; z-index: 1;'>{wd}</th>"
+                    html += f"<tr><th style='border: 1px solid #CBD5E1; padding: 10px; background-color: #F8FAFC; color: #0F172A; position: sticky; left: 0; z-index: 1;'>{wd}</th>"
                     for tb in pred_time_slots:
                         val = predict_data.loc[wd, tb]
                         ratio = val / max_val if max_val > 0 else 0
                         bg_color = f"rgba(217, 119, 6, {ratio * 0.8})" if val > 0 else "transparent"
                         font_color = "white" if ratio > 0.5 else "#1E293B"
                         display_val = f"{val:.1f}人" if val > 0 else "-"
-                        html += f"<td style='border: 1px solid #CBD5E1; padding: 8px; text-align: center; font-size:0.85rem; font-weight: bold; background-color: {bg_color}; color: {font_color};'>{display_val}</td>"
+                        html += f"<td style='border: 1px solid #CBD5E1; padding: 10px; text-align: center; font-size:0.85rem; font-weight: bold; background-color: {bg_color}; color: {font_color};'>{display_val}</td>"
                     html += "</tr>"
                 html += "</table></div>"
                 st.markdown(html, unsafe_allow_html=True)
@@ -688,34 +715,35 @@ elif menu == "管理":
             if selected_mng[0] != "-1":
                 target_idx = int(selected_mng[0])
                 target_row = df_manage.loc[target_idx]
-                st.markdown("<div style='margin-top: 10px; padding: 20px; border-radius: 12px; background-color: #FFFFFF; border: 1px solid #CBD5E1;'>", unsafe_allow_html=True)
+                st.markdown("<div style='margin-top: 10px; padding: 25px; border-radius: 12px; background-color: #FFFFFF; border: 1px solid #E2E8F0; box-shadow: 0 4px 6px rgba(0,0,0,0.05);'>", unsafe_allow_html=True)
                 
                 default_date = target_row['日付'].date() if pd.notnull(target_row['日付']) else jst_now.date()
                 edit_date = st.date_input("利用日", default_date)
                 
                 col_n, col_g = st.columns(2)
-                with col_n: edit_name = st.text_input("氏名", value=str(target_row['名前']))
+                with col_n: edit_name = st.text_input("氏名 (必須)", value=str(target_row['名前']), placeholder="例: 山田太郎")
                 with col_g:
                     current_grade = str(target_row['学年'])
+                    if not current_grade: current_grade = "--選択--"
                     g_index = GRADES.index(current_grade) if current_grade in GRADES else 0
-                    edit_grade = st.selectbox("学年", GRADES, index=g_index)
+                    edit_grade = st.selectbox("学年 (同姓同名がいる場合のみ)", GRADES, index=g_index)
                     
                 col_in, col_out = st.columns(2)
-                with col_in: edit_in_str = st.text_input("開始時間 (例: 1223)", value=str(target_row['入室時間']).replace(":", ""))
-                with col_out: edit_out_str = st.text_input("終了時間 (例: 1530)", value=str(target_row['退室時間']).replace(":", ""))
+                with col_in: edit_in_str = st.text_input("開始時間 (例: 1223)", value=str(target_row['入室時間']).replace(":", ""), placeholder="例: 1223")
+                with col_out: edit_out_str = st.text_input("終了時間 (例: 1530)", value=str(target_row['退室時間']).replace(":", ""), placeholder="例: 1530")
                 
                 st.markdown("<br>", unsafe_allow_html=True)
                 col_btn1, col_btn2 = st.columns(2)
                 with col_btn1:
                     if st.button("この内容で上書き保存", use_container_width=True, type="primary"):
                         edit_name_clean = edit_name.replace(" ", "").replace("　", "")
+                        grade_to_save = edit_grade if edit_grade != "--選択--" else ""
                         
                         edit_in = parse_custom_time(edit_in_str)
                         edit_out = parse_custom_time(edit_out_str)
                         
                         if edit_name_clean:
-                            if edit_grade == "--選択--": st.error("学年を選択してください。")
-                            elif edit_in is None or edit_out is None: st.error("開始と終了時間を正しく入力してください。")
+                            if edit_in is None or edit_out is None: st.error("開始と終了時間を正しく入力してください。")
                             elif not is_special_period(edit_date) and edit_in.hour < 12: st.error("通常期間は12時以降を入力してください。")
                             else:
                                 duration = calc_duration(edit_in, edit_out)
@@ -723,7 +751,7 @@ elif menu == "管理":
                                 else:
                                     df_manage.at[target_idx, '日付'] = pd.to_datetime(edit_date)
                                     df_manage.at[target_idx, '名前'] = edit_name_clean
-                                    df_manage.at[target_idx, '学年'] = edit_grade
+                                    df_manage.at[target_idx, '学年'] = grade_to_save
                                     df_manage.at[target_idx, '入室時間'] = edit_in.strftime("%H:%M")
                                     df_manage.at[target_idx, '退室時間'] = edit_out.strftime("%H:%M")
                                     df_manage.at[target_idx, '利用時間（時間）'] = duration
