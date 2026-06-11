@@ -1,68 +1,84 @@
-import streamlit as st
-import pandas as pd
-from datetime import datetime, timedelta
-import gspread
-from google.oauth2.service_account import Credentials
-import json
-import os
-import base64
-import unicodedata
-import streamlit.components.v1 as components
+# ... existing code ...
+def calc_duration(in_time, out_time):
+    def to_dt(t):
+        if isinstance(t, str):
+            parsed = parse_custom_time(t)
+            return datetime.combine(datetime.today(), parsed) if parsed else None
+        elif t is not None:
+            return datetime.combine(datetime.today(), t)
+        return None
 
-# 日本時間の「今」を取得
-jst_now = datetime.utcnow() + timedelta(hours=9)
-
-# 講習期間の判定
-def is_special_period(dt_date):
-    if dt_date is None: return False
-    m = dt_date.month
-    d = dt_date.day
-    # 春季講習: 3/15 〜 4/7
-    if (m == 3 and d >= 15) or (m == 4 and d <= 7): return True
-    # 夏期講習: 7/15 〜 8/31
-    if (m == 7 and d >= 15) or m == 8: return True
-    # 冬季講習: 12/1 〜 1/7
-    if m == 12 or (m == 1 and d <= 7): return True
-    return False
-
-# 年間のテスト期間の定義 (開始月, 開始日, 終了月, 終了日)
-TEST_PERIODS = [
-    (5, 11, 5, 20),   # 5月中旬
-    (6, 21, 6, 30),   # 6月下旬
-    (7, 1, 7, 10),    # 7月上旬
-    (9, 1, 9, 10),    # 9月上旬
-    (10, 11, 10, 20), # 10月中旬
-    (11, 1, 11, 10),  # 11月上旬
-    (12, 1, 12, 10),  # 12月上旬
-    (2, 20, 2, 29)    # 2月下旬
-]
-
-# 日付が「通常」「テスト1週間前」「テスト期間」のどれかを判定する
-def get_period_status(dt_date):
-    if dt_date is None: return "normal"
-    y = dt_date.year
-    curr_date = dt_date.date() if isinstance(dt_date, datetime) else dt_date
+    dt_in = to_dt(in_time)
+    dt_out = to_dt(out_time)
     
-    for tm1, td1, tm2, td2 in TEST_PERIODS:
-        try:
-            start_date = datetime(y, tm1, td1).date()
-            if tm2 == 2 and td2 == 29:
-                is_leap = y % 4 == 0 and (y % 100 != 0 or y % 400 == 0)
-                end_date = datetime(y, 2, 29 if is_leap else 28).date()
-            else:
-                end_date = datetime(y, tm2, td2).date()
-        except: continue
-        
-        before_start = start_date - timedelta(days=7)
-        before_end = start_date - timedelta(days=1)
-        
-        if start_date <= curr_date <= end_date:
-            return "test"
-        elif before_start <= curr_date <= before_end:
-            return "before_test"
-            
-    return "normal"
+    if dt_in and dt_out:
+        if dt_out >= dt_in:
+            return (dt_out - dt_in).total_seconds() / 3600.0
+        else:
+            return ((dt_out + timedelta(days=1)) - dt_in).total_seconds() / 3600.0
+    return 0.0
 
+# --- 1. ページ構成 ---
+st.set_page_config(page_title="TKG Study Room Analytics", page_icon="icon.png", layout="wide")
+
+img_b64 = ""
+if os.path.exists("icon.png"):
+    with open("icon.png", "rb") as f:
+        img_b64 = base64.b64encode(f.read()).decode()
+
+# アイコンの読み込みと、時間入力を自動補完する裏側スクリプト
+js_code = f"""
+<script>
+    const doc = window.parent.document;
+    
+    // アイコン設定
+    if ("{img_b64}" !== "") {{
+        let links = doc.querySelectorAll("link[rel~='apple-touch-icon']");
+        links.forEach(link => link.remove());
+        let newLink = doc.createElement('link');
+        newLink.rel = 'apple-touch-icon';
+        newLink.href = 'data:image/png;base64,{img_b64}';
+        doc.head.appendChild(newLink);
+    }}
+
+    // 入力欄からフォーカスが外れた瞬間に「:」を自動挿入する処理
+    doc.addEventListener('focusout', function(e) {{
+        if (e.target && e.target.tagName === 'INPUT' && e.target.type === 'text') {{
+            let val = e.target.value;
+            if (!val) return;
+            
+            // 全角数字を半角に変換
+            let halfVal = val.replace(/[０-９]/g, function(s) {{
+                return String.fromCharCode(s.charCodeAt(0) - 0xFEE0);
+            }});
+            
+            // 3桁か4桁の数字のみの場合
+            if (/^\d{{3,4}}$/.test(halfVal)) {{
+                let h = halfVal.length === 3 ? '0' + halfVal.slice(0,1) : halfVal.slice(0,2);
+                let m = halfVal.slice(-2);
+                let hNum = parseInt(h, 10);
+                let mNum = parseInt(m, 10);
+                
+                // 時間として正しい場合のみフォーマット (例: 2323 -> 23:23)
+                if (hNum >= 0 && hNum <= 23 && mNum >= 0 && mNum <= 59) {{
+                    let formatted = h + ':' + m;
+                    let nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
+                    if(nativeInputValueSetter) {{
+                        nativeInputValueSetter.call(e.target, formatted);
+                        // システムに変更を認識させる
+                        e.target.dispatchEvent(new Event('input', {{ bubbles: true }}));
+                    }}
+                }}
+            }}
+        }}
+    }}, true);
+</script>
+"""
+components.html(js_code, height=0, width=0)
+
+st.markdown("""
+<style>
+    /* 不要なメニューやヘッダーを隠す */
 # 過去のデータから、テスト前・テスト中の「混雑倍率」を学習する関数
 def learn_multipliers(df):
     default_test = 1.5   # 初期値: テスト中は1.5倍
