@@ -100,58 +100,60 @@ st.markdown("""
     /* 不要なメニューやヘッダーを隠す */
     #MainMenu, header, footer, [data-testid="stToolbar"] {visibility: hidden !important; display: none !important;}
     
-    /* 画面全体の背景色（明るいグレーでリッチに） */
-    .stApp { background-color: #F8FAFC; font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', Meiryo, sans-serif; }
+    /* 画面全体の背景色 */
+    .stApp { background-color: #F4F7FB; font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', Meiryo, sans-serif; }
     
     /* タイトルのデザイン */
-    .main-title { font-weight: 900; color: #0F172A; letter-spacing: 1px; margin-bottom: 30px; padding-bottom: 12px; border-bottom: 4px solid #E2E8F0; position: relative; font-size: 2.2rem; text-transform: uppercase;}
-    .main-title::after { content: ''; position: absolute; left: 0; bottom: -4px; width: 120px; height: 4px; background: linear-gradient(90deg, #2563EB, #1D4ED8); border-radius: 2px;}
-    .section-title { font-weight: 800; color: #1E293B; margin-top: 2.5rem; margin-bottom: 1.5rem; padding-left: 12px; border-left: 6px solid #3B82F6; font-size: 1.5rem; }
+    .main-title { font-weight: 900; color: #0A2B56; letter-spacing: 2px; margin-bottom: 25px; padding-bottom: 10px; border-bottom: 3px solid #E2E8F0; position: relative; font-size: 2.4rem; text-transform: uppercase;}
+    .main-title::after { content: ''; position: absolute; left: 0; bottom: -3px; width: 100px; height: 3px; background: linear-gradient(90deg, #0A2B56, #005BAB); }
+    .section-title { font-weight: 800; color: #0A2B56; margin-top: 2rem; margin-bottom: 1rem; padding-left: 10px; border-left: 5px solid #005BAB; font-size: 1.6rem; }
     
-    /* 入力エリアをカード風に（立体感） */
-    div[data-testid="stVerticalBlock"] > div[style*="flex-direction: column"] {
-        background-color: #FFFFFF;
-        padding: 20px;
-        border-radius: 12px;
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
-        border: 1px solid #E2E8F0;
-        margin-bottom: 20px;
-    }
-
     /* ラジオボタン（メニュー）のデザイン */
-    div[role="radiogroup"] { display: flex; background-color: #F1F5F9; padding: 6px; border-radius: 12px; box-shadow: inset 0 2px 4px rgba(0,0,0,0.05); margin-bottom: 30px; }
-    div[role="radiogroup"] label { flex: 1; text-align: center; justify-content: center; padding: 12px 5px !important; margin: 0 !important; border-radius: 8px; transition: all 0.2s ease; cursor: pointer; }
-    div[role="radiogroup"] label[data-checked="true"] { background-color: #FFFFFF; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-    div[role="radiogroup"] label[data-checked="true"] p { color: #1D4ED8 !important; font-weight: 900; }
-    div[role="radiogroup"] label p { color: #64748B; font-weight: 700; font-size: 0.9rem; }
+    div[role="radiogroup"] { display: flex; background-color: #FFFFFF; padding: 5px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); margin-bottom: 20px; margin-top: 5px; }
+    div[role="radiogroup"] label { flex: 1; text-align: center; justify-content: center; padding: 10px 5px !important; margin: 0 !important; border-radius: 8px; transition: 0.2s; cursor: pointer; }
+    div[role="radiogroup"] label[data-checked="true"] { background-color: #0A2B56; }
+    div[role="radiogroup"] label[data-checked="true"] p { color: #FFFFFF !important; font-weight: 800; }
+    div[role="radiogroup"] label p { color: #64748B; font-weight: 700; font-size: 0.85rem; }
 
-    /* 入力フォームのラベル（文字）を濃くして見やすくする */
-    div[data-testid="stWidgetLabel"] p, div[data-testid="stWidgetLabel"] label { color: #0F172A !important; font-weight: 800 !important; font-size: 1rem !important; }
+    /* ★重要：入力フォームのラベル（文字）を強制的に濃い色にする */
+    div[data-testid="stWidgetLabel"] p, 
+    div[data-testid="stWidgetLabel"] label, 
+    .stTextInput label p, 
+    .stSelectbox label p, 
+    .stDateInput label p { 
+        color: #0A2B56 !important; 
+        font-weight: 800 !important; 
+        font-size: 1.05rem !important; 
+    }
     
     /* 入力ボックス本体のデザイン */
-    div[data-baseweb="input"] > div, div[data-baseweb="select"] > div { background-color: #F8FAFC !important; border-radius: 8px !important; border: 2px solid #E2E8F0 !important; transition: border-color 0.2s ease; }
-    div[data-baseweb="input"] > div:focus-within, div[data-baseweb="select"] > div:focus-within { border-color: #3B82F6 !important; background-color: #FFFFFF !important; box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2) !important;}
-    div[data-baseweb="input"] input, div[data-baseweb="select"] div { color: #0F172A !important; font-weight: 700; font-size: 1.1rem; }
+    div[data-baseweb="input"] > div, div[data-baseweb="select"] > div { background-color: #FFFFFF !important; border-radius: 8px !important; border: 1px solid #CBD5E1 !important; box-shadow: inset 0 1px 2px rgba(0,0,0,0.02); height: 3.2rem; }
+    /* 入力された文字の色 */
+    div[data-baseweb="input"] input, div[data-baseweb="select"] div { color: #1E293B !important; font-weight: 700; font-size: 1.05rem; }
+    /* プレースホルダー（ヒント）の色 */
     div[data-baseweb="input"] input::placeholder { color: #94A3B8 !important; font-weight: 500; }
     
     /* ボタンのデザイン */
-    button[kind="secondary"] { background-color: #FFFFFF !important; color: #1E293B !important; border: 2px solid #CBD5E1 !important; font-weight: 700 !important; border-radius: 8px !important; transition: all 0.2s ease !important; min-height: 3.5rem !important; }
-    button[kind="secondary"]:hover { border-color: #64748B !important; background-color: #F1F5F9 !important; }
+    button[kind="secondary"] { background-color: #FFFFFF !important; color: #0A2B56 !important; border: 2px solid #E2E8F0 !important; font-weight: 700 !important; border-radius: 6px !important; transition: 0.2s !important; min-height: 3.5rem !important; padding: 2px !important; }
+    button[kind="secondary"]:hover { border-color: #005BAB !important; background-color: #F8FAFC !important; }
     
-    button[kind="primary"] { background: linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%) !important; color: #FFFFFF !important; border: none !important; font-weight: 800 !important; border-radius: 8px !important; box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.4) !important; min-height: 4rem !important; transition: all 0.2s ease; }
-    button[kind="primary"]:hover { transform: translateY(-2px); box-shadow: 0 6px 8px -1px rgba(37, 99, 235, 0.5) !important; }
-    button[kind="primary"]:active { transform: translateY(1px); }
-    button p { font-size: 1.2rem !important; margin: 0 !important; letter-spacing: 1px; }
+    button[kind="primary"] { background: linear-gradient(135deg, #0A2B56 0%, #005BAB 100%) !important; color: #FFFFFF !important; border: none !important; font-weight: 800 !important; border-radius: 6px !important; box-shadow: 0 4px 6px -1px rgba(0, 91, 171, 0.3) !important; min-height: 3.5rem !important; padding: 2px !important; transition: all 0.2s ease; }
+    button[kind="primary"]:active { transform: translateY(2px); }
+    button p { font-size: 1.3rem !important; margin: 0 !important; font-weight: bold; letter-spacing: 1px; }
 
     /* メトリクス（パフォーマンスサマリー）を見やすくするCSS */
-    div[data-testid="stMetric"] { background-color: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 12px; padding: 20px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); }
-    [data-testid="stMetricValue"] > div, [data-testid="stMetricValue"] { color: #0F172A !important; font-weight: 900 !important; font-size: 2.6rem !important; }
-    [data-testid="stMetricLabel"] p, [data-testid="stMetricLabel"] { color: #64748B !important; font-size: 1.1rem !important; font-weight: 800 !important; }
+    div[data-testid="stMetric"] { background-color: #FFFFFF; border: 1px solid #CBD5E1; border-radius: 12px; padding: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+    [data-testid="stMetricValue"] > div, [data-testid="stMetricValue"] { color: #0A2B56 !important; font-weight: 900 !important; font-size: 2.4rem !important; }
+    [data-testid="stMetricLabel"] p, [data-testid="stMetricLabel"] { color: #475569 !important; font-size: 1.05rem !important; font-weight: bold !important; }
 
+    @media (min-width: 768px) { 
+        div[role="radiogroup"] { max-width: 600px; } 
+        .rank-card { flex: 1; min-width: 30%; padding: 25px; border-radius: 16px; border: 1px solid #E2E8F0; } 
+    }
     @media (max-width: 767px) { 
         .main-title { font-size: 1.8rem; } .section-title { font-size: 1.3rem; } 
         div[role="radiogroup"] { width: 100%; flex-wrap: wrap; } div[role="radiogroup"] label { min-width: 45%; } 
-        div[data-testid="stVerticalBlock"] > div[style*="flex-direction: column"] { padding: 15px; }
+        .rank-card { width: 100%; padding: 20px; border-radius: 12px; margin-bottom: 15px; border: 1px solid #E2E8F0; } 
     }
 </style>
 """, unsafe_allow_html=True)
@@ -165,9 +167,11 @@ if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
 
 if not st.session_state.authenticated:
-    st.markdown("<h3 style='text-align: center; color: #0F172A; margin-top: 15vh; margin-bottom: 30px; font-weight: 900; font-size: 2.5rem; letter-spacing: 2px;'>Study Room System</h3>", unsafe_allow_html=True)
+    st.markdown("<h3 style='text-align: center; color: #0A2B56; margin-top: 15vh; margin-bottom: 30px; font-weight: 900; font-size: 2.5rem; letter-spacing: 2px;'>Study Room System</h3>", unsafe_allow_html=True)
     with st.form("login_form", clear_on_submit=False):
-        pwd = st.text_input("🔑 管理用パスワードを入力してください", type="password", placeholder="例: password123")
+        # パスワード画面のラベルも強制的に濃くする
+        st.markdown("<p style='color: #0A2B56; font-weight: bold; margin-bottom: 5px;'>🔑 管理用パスワードを入力してください</p>", unsafe_allow_html=True)
+        pwd = st.text_input("パスワード", type="password", placeholder="例: password123", label_visibility="collapsed")
         st.markdown("<br>", unsafe_allow_html=True)
         submitted = st.form_submit_button("システムにログイン", type="primary", use_container_width=True)
         if submitted:
@@ -347,30 +351,26 @@ elif menu == "1件ずつ":
         default_name = ""
         default_grade = "--選択--"
 
-    # フォームを視覚的にグループ化するためのコンテナ設定
-    with st.container():
-        st.markdown("<div style='background: white; padding: 25px; border-radius: 12px; border: 1px solid #E2E8F0; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);'>", unsafe_allow_html=True)
-        col1, col2 = st.columns([1, 1])
-        with col1: f_date = st.date_input("利用日", jst_now.date(), max_value=jst_now.date())
-        with col2: 
-            g_index = GRADES.index(default_grade) if default_grade in GRADES else 0
-            f_grade = st.selectbox("学年 (※同姓同名がいる場合のみ選択)", GRADES, index=g_index)
-            
-        k_name = f"name_{st.session_state.form_key}"
-        f_name = st.text_input("氏名 (必須)", value=default_name, key=k_name, placeholder="例: 山田太郎")
+    col1, col2 = st.columns([1, 1])
+    with col1: f_date = st.date_input("利用日", jst_now.date(), max_value=jst_now.date())
+    with col2: 
+        g_index = GRADES.index(default_grade) if default_grade in GRADES else 0
+        f_grade = st.selectbox("学年 (※同姓同名がいる場合のみ選択)", GRADES, index=g_index)
+        
+    k_name = f"name_{st.session_state.form_key}"
+    f_name = st.text_input("氏名 (必須)", value=default_name, key=k_name, placeholder="例: 山田太郎")
 
-        # デフォルトで開始時間を1時間前、終了時間を現在時刻にセット
-        default_in = (jst_now - timedelta(hours=1)).strftime("%H%M")
-        default_out = jst_now.strftime("%H%M")
+    # デフォルトで開始時間を1時間前、終了時間を現在時刻にセット
+    default_in = (jst_now - timedelta(hours=1)).strftime("%H%M")
+    default_out = jst_now.strftime("%H%M")
 
-        col_in, col_out = st.columns(2)
-        with col_in:
-            in_time_str = st.text_input("開始時間 (必須)", value=default_in, placeholder="例: 1223")
-        with col_out:
-            out_time_str = st.text_input("終了時間 (必須)", value=default_out, placeholder="例: 1530")
-        st.markdown("</div>", unsafe_allow_html=True)
+    col_in, col_out = st.columns(2)
+    with col_in:
+        in_time_str = st.text_input("開始時間 (必須)", value=default_in, placeholder="例: 1223")
+    with col_out:
+        out_time_str = st.text_input("終了時間 (必須)", value=default_out, placeholder="例: 1530")
 
-    st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown("<hr style='margin-top:20px; margin-bottom:20px;'>", unsafe_allow_html=True)
 
     if st.button("この内容で1件記録する", use_container_width=True, type="primary"):
         f_name_clean = f_name.replace(" ", "").replace("　", "")
