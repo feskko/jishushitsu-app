@@ -119,6 +119,10 @@ st.markdown("""
     button[kind="primary"]:active { transform: translateY(2px); }
     button p { font-size: 1.3rem !important; margin: 0 !important; font-weight: bold; }
 
+    /* 入力フォームのラベルを濃い紺色にして見やすくする */
+    div[data-testid="stWidgetLabel"] p, div[data-testid="stWidgetLabel"] label { color: #0A2B56 !important; font-weight: 800 !important; font-size: 1.05rem !important; }
+    div[data-testid="stForm"] div[data-testid="stWidgetLabel"] p { color: #0A2B56 !important; }
+
     /* メトリクス（パフォーマンスサマリー）を見やすくするCSS */
     div[data-testid="stMetric"] { background-color: #FFFFFF; border: 1px solid #CBD5E1; border-radius: 12px; padding: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
     [data-testid="stMetricValue"] > div, [data-testid="stMetricValue"] { color: #0A2B56 !important; font-weight: 900 !important; font-size: 2.4rem !important; }
@@ -147,7 +151,7 @@ if "authenticated" not in st.session_state:
 if not st.session_state.authenticated:
     st.markdown("<h3 style='text-align: center; color: #0A2B56; margin-top: 15vh; margin-bottom: 20px; font-weight: 900; font-size: 2rem;'>Study Room System</h3>", unsafe_allow_html=True)
     with st.form("login_form", clear_on_submit=False):
-        pwd = st.text_input("パスワード", type="password", placeholder="****")
+        pwd = st.text_input("🔑 管理用パスワードを入力してください", type="password", placeholder="パスワードを入力")
         submitted = st.form_submit_button("ロック解除", type="primary", use_container_width=True)
         if submitted:
             if pwd == APP_PASSWORD:
