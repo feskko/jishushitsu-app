@@ -25,28 +25,78 @@ def is_special_period(dt_date):
     if m == 12 or (m == 1 and d <= 7): return True
     return False
 
-# テスト期間の判定（予測用）
-def is_test_period(dt_date):
-    if dt_date is None: return False
-    m = dt_date.month
-    d = dt_date.day
-    # 5月中旬 (5/11〜5/20)
-    if m == 5 and 11 <= d <= 20: return True
-    # 6月下旬 (6/21〜6/30)
-    if m == 6 and 21 <= d <= 30: return True
-    # 7月上旬 (7/1〜7/10)
-    if m == 7 and 1 <= d <= 10: return True
-    # 9月上旬 (9/1〜9/10)
-    if m == 9 and 1 <= d <= 10: return True
-    # 10月中旬 (10/11〜10/20)
-    if m == 10 and 11 <= d <= 20: return True
-    # 11月上旬 (11/1〜11/10)
-    if m == 11 and 1 <= d <= 10: return True
-    # 12月上旬 (12/1〜12/10)
-    if m == 12 and 1 <= d <= 10: return True
-    # 2月下旬 (2/20〜2/29)
-    if m == 2 and d >= 20: return True
-    return False
+# 年間のテスト期間の定義 (開始月, 開始日, 終了月, 終了日)
+TEST_PERIODS = [
+    (5, 11, 5, 20),   # 5月中旬
+    (6, 21, 6, 30),   # 6月下旬
+    (7, 1, 7, 10),    # 7月上旬
+    (9, 1, 9, 10),    # 9月上旬
+    (10, 11, 10, 20), # 10月中旬
+    (11, 1, 11, 10),  # 11月上旬
+    (12, 1, 12, 10),  # 12月上旬
+    (2, 20, 2, 29)    # 2月下旬
+]
+
+# 日付が「通常」「テスト1週間前」「テスト期間」のどれかを判定する
+def get_period_status(dt_date):
+    if dt_date is None: return "normal"
+    y = dt_date.year
+    curr_date = dt_date.date() if isinstance(dt_date, datetime) else dt_date
+    
+    for tm1, td1, tm2, td2 in TEST_PERIODS:
+        try:
+            start_date = datetime(y, tm1, td1).date()
+            if tm2 == 2 and td2 == 29:
+                is_leap = y % 4 == 0 and (y % 100 != 0 or y % 400 == 0)
+                end_date = datetime(y, 2, 29 if is_leap else 28).date()
+            else:
+                end_date = datetime(y, tm2, td2).date()
+        except: continue
+        
+        before_start = start_date - timedelta(days=7)
+        before_end = start_date - timedelta(days=1)
+        
+        if start_date <= curr_date <= end_date:
+            return "test"
+        elif before_start <= curr_date <= before_end:
+            return "before_test"
+            
+    return "normal"
+
+# 過去のデータから、テスト前・テスト中の「混雑倍率」を学習する関数
+def learn_multipliers(df):
+    default_test = 1.5   # 初期値: テスト中は1.5倍
+    default_before = 1.2 # 初期値: テスト1週間前は1.2倍
+    if df.empty: return default_test, default_before
+    
+    try:
+        temp_df = df.copy()
+        temp_df['date_only'] = temp_df['日付'].dt.date
+        daily_users = temp_df.groupby('date_only')['名前'].nunique().reset_index()
+        daily_users['status'] = daily_users['date_only'].apply(get_period_status)
+        
+        counts = daily_users.groupby('status')['名前'].agg(['mean', 'count'])
+        
+        # 通常期の平均来室人数
+        normal_mean = counts.loc['normal', 'mean'] if 'normal' in counts.index and counts.loc['normal', 'count'] >= 5 else None
+        
+        test_mult = default_test
+        if 'test' in counts.index and counts.loc['test', 'count'] >= 3 and normal_mean and normal_mean > 0:
+            actual_mult = counts.loc['test', 'mean'] / normal_mean
+            actual_mult = max(1.0, min(actual_mult, 3.0)) # 異常値除外
+            weight = min(counts.loc['test', 'count'] / 10.0, 1.0) # データが蓄積するほど実績を重視
+            test_mult = default_test * (1 - weight) + actual_mult * weight
+
+        before_mult = default_before
+        if 'before_test' in counts.index and counts.loc['before_test', 'count'] >= 3 and normal_mean and normal_mean > 0:
+            actual_mult = counts.loc['before_test', 'mean'] / normal_mean
+            actual_mult = max(1.0, min(actual_mult, 2.5))
+            weight = min(counts.loc['before_test', 'count'] / 10.0, 1.0)
+            before_mult = default_before * (1 - weight) + actual_mult * weight
+
+        return test_mult, before_mult
+    except:
+        return default_test, default_before
 
 # 分析用のタイムスロット取得
 def get_time_slots_for_period(period_str):
@@ -54,7 +104,6 @@ def get_time_slots_for_period(period_str):
         return [f"{h:02d}:00" for h in range(9, 23)]
     try:
         m = int(period_str.split("年")[1].replace("月", ""))
-        # 講習が含まれる月
         if m in [1, 3, 4, 7, 8, 12]:
             return [f"{h:02d}:00" for h in range(9, 23)]
         else:
@@ -65,7 +114,6 @@ def get_time_slots_for_period(period_str):
 # 時刻の柔軟なパース (全角対応、1223 -> 12:23)
 def parse_custom_time(t_str):
     if not t_str: return None
-    # 全角数字を半角数字に変換し、空白を削除
     t_str = unicodedata.normalize('NFKC', str(t_str)).strip()
     if t_str == "" or "コマ" in t_str: return None
     
@@ -122,25 +170,19 @@ if os.path.exists("icon.png"):
 
 st.markdown("""
 <style>
-    /* 不要なメニューやヘッダーを隠す */
     #MainMenu, header, footer, [data-testid="stToolbar"] {visibility: hidden !important; display: none !important;}
-    
-    /* 画面全体の背景色 */
     .stApp { background-color: #F4F7FB; font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', Meiryo, sans-serif; }
     
-    /* タイトルのデザイン */
     .main-title { font-weight: 900; color: #0A2B56; letter-spacing: 2px; margin-bottom: 25px; padding-bottom: 10px; border-bottom: 3px solid #E2E8F0; position: relative; font-size: 2.4rem; text-transform: uppercase;}
     .main-title::after { content: ''; position: absolute; left: 0; bottom: -3px; width: 100px; height: 3px; background: linear-gradient(90deg, #0A2B56, #005BAB); }
     .section-title { font-weight: 800; color: #0A2B56; margin-top: 2rem; margin-bottom: 1rem; padding-left: 10px; border-left: 5px solid #005BAB; font-size: 1.6rem; }
     
-    /* ラジオボタン（メニュー）のデザイン */
     div[role="radiogroup"] { display: flex; background-color: #FFFFFF; padding: 5px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); margin-bottom: 20px; margin-top: 5px; }
     div[role="radiogroup"] label { flex: 1; text-align: center; justify-content: center; padding: 10px 5px !important; margin: 0 !important; border-radius: 8px; transition: 0.2s; cursor: pointer; }
     div[role="radiogroup"] label[data-checked="true"] { background-color: #0A2B56; }
     div[role="radiogroup"] label[data-checked="true"] p { color: #FFFFFF !important; font-weight: 800; }
     div[role="radiogroup"] label p { color: #64748B; font-weight: 700; font-size: 0.85rem; }
 
-    /* ★重要：入力フォームのラベル（文字）を強制的に濃い色にする */
     div[data-testid="stWidgetLabel"] p, 
     div[data-testid="stWidgetLabel"] label, 
     .stTextInput label p, 
@@ -151,21 +193,16 @@ st.markdown("""
         font-size: 1.05rem !important; 
     }
 
-    /* タブの文字色を強制的に濃い色にする */
     button[data-baseweb="tab"] p {
         color: #0A2B56 !important;
         font-weight: bold !important;
         font-size: 1.1rem !important;
     }
     
-    /* 入力ボックス本体のデザイン */
     div[data-baseweb="input"] > div, div[data-baseweb="select"] > div { background-color: #FFFFFF !important; border-radius: 8px !important; border: 1px solid #CBD5E1 !important; box-shadow: inset 0 1px 2px rgba(0,0,0,0.02); height: 3.2rem; }
-    /* 入力された文字の色 */
     div[data-baseweb="input"] input, div[data-baseweb="select"] div { color: #1E293B !important; font-weight: 700; font-size: 1.05rem; }
-    /* プレースホルダー（ヒント）の色 */
     div[data-baseweb="input"] input::placeholder { color: #94A3B8 !important; font-weight: 500; }
     
-    /* ボタンのデザイン */
     button[kind="secondary"] { background-color: #FFFFFF !important; color: #0A2B56 !important; border: 2px solid #E2E8F0 !important; font-weight: 700 !important; border-radius: 6px !important; transition: 0.2s !important; min-height: 3.5rem !important; padding: 2px !important; }
     button[kind="secondary"]:hover { border-color: #005BAB !important; background-color: #F8FAFC !important; }
     
@@ -173,7 +210,6 @@ st.markdown("""
     button[kind="primary"]:active { transform: translateY(2px); }
     button p { font-size: 1.3rem !important; margin: 0 !important; font-weight: bold; letter-spacing: 1px; }
 
-    /* メトリクス（パフォーマンスサマリー）を見やすくするCSS */
     div[data-testid="stMetric"] { background-color: #FFFFFF; border: 1px solid #CBD5E1; border-radius: 12px; padding: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
     [data-testid="stMetricValue"] > div, [data-testid="stMetricValue"] { color: #0A2B56 !important; font-weight: 900 !important; font-size: 2.4rem !important; }
     [data-testid="stMetricLabel"] p, [data-testid="stMetricLabel"] { color: #475569 !important; font-size: 1.05rem !important; font-weight: bold !important; }
@@ -201,7 +237,6 @@ if "authenticated" not in st.session_state:
 if not st.session_state.authenticated:
     st.markdown("<h3 style='text-align: center; color: #0A2B56; margin-top: 15vh; margin-bottom: 30px; font-weight: 900; font-size: 2.5rem; letter-spacing: 2px;'>Study Room System</h3>", unsafe_allow_html=True)
     with st.form("login_form", clear_on_submit=False):
-        # パスワード画面のラベルも強制的に濃くする
         st.markdown("<p style='color: #0A2B56; font-weight: bold; margin-bottom: 5px;'>🔑 管理用パスワードを入力してください</p>", unsafe_allow_html=True)
         pwd = st.text_input("パスワード", type="password", placeholder="例: password123", label_visibility="collapsed")
         st.markdown("<br>", unsafe_allow_html=True)
@@ -309,7 +344,6 @@ if menu == "一括入力":
                     error_msgs.append(f"{name}さん (開始・終了時間を正しく入力してください)")
                     continue
                     
-                # 講習期間外の午前中入力チェック
                 if not is_special_period(f_date_batch) and in_dt_time.hour < 12:
                     error_msgs.append(f"{name}さん (通常期間は12時以降を入力してください)")
                     continue
@@ -322,7 +356,6 @@ if menu == "一括入力":
                 in_str = in_dt_time.strftime("%H:%M")
                 out_str = out_dt_time.strftime("%H:%M")
                 
-                # 同一人物・同一時間のチェック
                 is_dup_current = not df_current[
                     (df_current['日付'] == pd.to_datetime(f_date_batch)) & 
                     (df_current['名前'] == name) & 
@@ -361,7 +394,6 @@ if menu == "一括入力":
 elif menu == "1件ずつ":
     st.markdown("<div class='main-title'>SINGLE ENTRY PANEL</div>", unsafe_allow_html=True)
     
-    # 過去データからサジェスト用リストを作成
     df_history = load_data()
     user_list = ["-- 新規入力 (直接入力してください) --"]
     recent_users = pd.DataFrame()
@@ -392,7 +424,6 @@ elif menu == "1件ずつ":
     k_name = f"name_{st.session_state.form_key}"
     f_name = st.text_input("氏名 (必須)", value=default_name, key=k_name, placeholder="例: 山田太郎")
 
-    # デフォルトで開始時間を1時間前、終了時間を現在時刻にセット
     default_in = (jst_now - timedelta(hours=1)).strftime("%H%M")
     default_out = jst_now.strftime("%H%M")
 
@@ -495,7 +526,6 @@ elif menu == "分析":
     df_ana = load_data()
     jst_today = pd.Timestamp(jst_now.date())
 
-    # --- 利用率（フィードバック）の計算と表示 ---
     st.markdown("<div class='section-title'>パフォーマンスサマリー（前月比）</div>", unsafe_allow_html=True)
     if not df_ana.empty:
         this_month_start = jst_today.replace(day=1)
@@ -531,14 +561,13 @@ elif menu == "分析":
         
         proj_hours_this_month = hours_this / today_d * days_in_month if today_d > 0 else 0
         
-        # 成長トレンドを加味（変動幅を制限して現実的な数字に）
         growth_rate_h = pct_hours / 100.0 if pct_hours != 100 else 0
         next_month_h = proj_hours_this_month * (1 + max(min(growth_rate_h, 0.15), -0.15))
         next_month_u = users_this * (1 + max(min((pct_users / 100.0), 0.1), -0.1))
         
         st.markdown(f"""
         <div style='background-color: #FFFFFF; border-left: 6px solid #F59E0B; padding: 20px; border-radius: 12px; margin-top: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.05);'>
-            <div style='font-weight: 900; color: #0F172A; margin-bottom: 8px; font-size: 1.2rem;'>🚀 AIによる翌月の着地予測</div>
+            <div style='font-weight: 900; color: #0F172A; margin-bottom: 8px; font-size: 1.2rem;'>🚀 翌月の着地予測</div>
             <div style='color: #475569; font-size: 1.05rem;'>
                 現在のペースと成長トレンドを考慮すると、来月は <b style='color: #B45309; font-size: 1.3rem;'>約 {next_month_h:.0f} 時間</b> の利用と、<b style='color: #B45309; font-size: 1.3rem;'>約 {int(next_month_u)} 名</b> の生徒の来室が見込まれます。
             </div>
@@ -589,7 +618,6 @@ elif menu == "分析":
 
             target_df = df_ana if selected_period == "累計" else df_ana[df_ana['年月'] == selected_period]
             
-            # 対象の月に応じてタイムスロットを切り替える
             current_time_slots = get_time_slots_for_period(selected_period)
             weekdays = ["月", "火", "水", "木", "金", "土", "日"]
             heatmap_data = pd.DataFrame(0, index=weekdays, columns=current_time_slots)
@@ -658,36 +686,60 @@ elif menu == "分析":
         else: st.info("集計するデータがありません。")
 
     with tab3:
-        st.markdown("<div class='section-title'>来週の混雑予測（AI推計）</div>", unsafe_allow_html=True)
+        st.markdown("<div class='section-title'>来週の混雑予測（推計）</div>", unsafe_allow_html=True)
         st.markdown("<p style='color:#64748B; font-size:1rem; font-weight: bold;'>直近4週間（過去28日間）の実際の利用データを解析し、来週の各時間帯に平均して何人の生徒が来るかを推計しています。</p>", unsafe_allow_html=True)
         
-        predict_period = jst_today + pd.Timedelta(days=7)
-        is_next_week_test = is_test_period(predict_period)
-        
-        if is_next_week_test:
-            st.markdown("<div style='background-color: #FEF2F2; border-left: 5px solid #DC2626; padding: 15px; margin-bottom: 20px; border-radius: 8px;'><p style='color:#DC2626; font-weight:bold; margin:0;'>⚠️ 来週はテスト期間に該当するため、通常より混雑（約1.5倍）が予想されます。座席数（20席）を超える時間帯にご注意ください。</p></div>", unsafe_allow_html=True)
-
         if not df_ana.empty:
+            # 過去のデータから乗数を学習
+            test_mult, before_mult = learn_multipliers(df_ana)
+            
             four_weeks_ago = jst_today - pd.Timedelta(days=28)
             df_recent = df_ana[pd.to_datetime(df_ana['日付']) >= four_weeks_ago]
             
-            if not df_recent.empty:
-                pred_period_str = predict_period.strftime('%Y年%m月')
-                pred_time_slots = get_time_slots_for_period(pred_period_str)
-                
-                weekdays = ["月", "火", "水", "木", "金", "土", "日"]
-                predict_data = pd.DataFrame(0.0, index=weekdays, columns=pred_time_slots)
+            # 来週の日付を特定し、テスト前やテスト期間が含まれるかチェック
+            target_dates = [jst_today + timedelta(days=i) for i in range(1, 8)]
+            has_test = any(get_period_status(dt) == "test" for dt in target_dates)
+            has_before = any(get_period_status(dt) == "before_test" for dt in target_dates)
+            
+            if has_test or has_before:
+                msg_parts = []
+                if has_test: msg_parts.append("「テスト期間」")
+                if has_before: msg_parts.append("「テスト1週間前」")
+                status_str = " または ".join(msg_parts)
+                st.markdown(f"<div style='background-color: #FEF2F2; border-left: 5px solid #DC2626; padding: 15px; margin-bottom: 20px; border-radius: 8px;'><p style='color:#DC2626; font-weight:bold; margin:0;'>⚠️ 来週は{status_str}に該当する日があるため、通常より混雑が予想されます。座席数（20席）を超える時間帯にご注意ください。</p></div>", unsafe_allow_html=True)
 
-                # テスト期間なら予測人数を1.5倍に補正する
-                test_multiplier = 1.5 if is_next_week_test else 1.0
+            if not df_recent.empty:
+                pred_period_str = (jst_today + pd.Timedelta(days=7)).strftime('%Y年%m月')
+                pred_time_slots = get_time_slots_for_period(pred_period_str)
+                weekdays = ["月", "火", "水", "木", "金", "土", "日"]
+                
+                # 平準化用のベースライン計算
+                predict_data = pd.DataFrame(0.0, index=weekdays, columns=pred_time_slots)
 
                 for _, row in df_recent.iterrows():
                     if pd.isnull(row['日付']) or not row['入室時間'] or not row['退室時間']: continue
                     try:
-                        wd = weekdays[pd.to_datetime(row['日付']).weekday()]
+                        dt = pd.to_datetime(row['日付'])
+                        wd = weekdays[dt.weekday()]
+                        status = get_period_status(dt)
+                        
+                        # 過去データが既にテスト前・テスト中だった場合、割引いて「通常時」の水準に戻す
+                        div_factor = 1.0
+                        if status == "test": div_factor = test_mult
+                        elif status == "before_test": div_factor = before_mult
+                        
                         for slot in get_active_slots(row['入室時間'], row['退室時間'], pred_time_slots):
-                            predict_data.loc[wd, slot] += 0.25 * test_multiplier # 4週平均 × 倍率
+                            predict_data.loc[wd, slot] += (0.25 / div_factor)
                     except: continue
+
+                # 来週の該当曜日ごとに、適切な乗数を掛ける
+                for dt in target_dates:
+                    wd = weekdays[dt.weekday()]
+                    status = get_period_status(dt)
+                    mult = 1.0
+                    if status == "test": mult = test_mult
+                    elif status == "before_test": mult = before_mult
+                    predict_data.loc[wd] = predict_data.loc[wd] * mult
 
                 html = "<div style='overflow-x: auto; background: white; padding: 15px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); border: 1px solid #E2E8F0;'><table style='width:100%; border-collapse: collapse; min-width: 600px;'>"
                 html += "<tr><th style='border: 1px solid #CBD5E1; padding: 10px; background-color: #F8FAFC; color: #0F172A; position: sticky; left: 0; z-index: 1;'>曜日</th>"
@@ -699,30 +751,24 @@ elif menu == "分析":
                     for tb in pred_time_slots:
                         val = predict_data.loc[wd, tb]
                         
-                        # 20席を基準としたヒートマップの色分け
                         ratio = val / 20.0
                         if ratio > 1.0: ratio = 1.0
                         
-                        # 四捨五入して整数にする
                         rounded_val = int(round(val))
                         
-                        if val >= 20:
-                            # 満席超過レベル (濃い赤)
+                        if rounded_val >= 20:
                             bg_color = "rgba(220, 38, 38, 0.9)"
                             font_color = "white"
                             display_val = "満席⚠️"
-                        elif val >= 15:
-                            # 混雑警戒レベル (オレンジ)
+                        elif rounded_val >= 15:
                             bg_color = f"rgba(234, 88, 12, {max(0.6, ratio)})"
                             font_color = "white"
                             display_val = f"約{rounded_val}人"
-                        elif val > 0:
-                            # 通常レベル (青)
+                        elif rounded_val > 0:
                             bg_color = f"rgba(37, 99, 235, {ratio * 0.8})"
                             font_color = "white" if ratio > 0.4 else "#1E293B"
                             display_val = f"約{rounded_val}人"
                         else:
-                            # 空席
                             bg_color = "transparent"
                             font_color = "#1E293B"
                             display_val = "-"
