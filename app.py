@@ -203,30 +203,45 @@ js_code = f"""
         doc.head.appendChild(newLink);
     }}
 
-    doc.addEventListener('focusout', function(e) {{
-        if (e.target && e.target.tagName === 'INPUT' && e.target.type === 'text') {{
-            let val = e.target.value;
-            if (!val) return;
+    function formatTimeInput(target) {{
+        let val = target.value;
+        if (!val) return;
+        
+        let halfVal = val.replace(/[０-９]/g, function(s) {{
+            return String.fromCharCode(s.charCodeAt(0) - 0xFEE0);
+        }});
+        
+        if (/^\d{{3,4}}$/.test(halfVal)) {{
+            let h = halfVal.length === 3 ? '0' + halfVal.slice(0,1) : halfVal.slice(0,2);
+            let m = halfVal.slice(-2);
+            let hNum = parseInt(h, 10);
+            let mNum = parseInt(m, 10);
             
-            let halfVal = val.replace(/[０-９]/g, function(s) {{
-                return String.fromCharCode(s.charCodeAt(0) - 0xFEE0);
-            }});
-            
-            if (/^\d{{3,4}}$/.test(halfVal)) {{
-                let h = halfVal.length === 3 ? '0' + halfVal.slice(0,1) : halfVal.slice(0,2);
-                let m = halfVal.slice(-2);
-                let hNum = parseInt(h, 10);
-                let mNum = parseInt(m, 10);
-                
-                if (hNum >= 0 && hNum <= 23 && mNum >= 0 && mNum <= 59) {{
-                    let formatted = h + ':' + m;
-                    let nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
-                    if(nativeInputValueSetter) {{
-                        nativeInputValueSetter.call(e.target, formatted);
-                        e.target.dispatchEvent(new Event('input', {{ bubbles: true }}));
-                    }}
+            if (hNum >= 0 && hNum <= 23 && mNum >= 0 && mNum <= 59) {{
+                let formatted = h + ':' + m;
+                let prototype = target.tagName === 'INPUT' ? window.HTMLInputElement.prototype : window.HTMLTextAreaElement.prototype;
+                let nativeInputValueSetter = Object.getOwnPropertyDescriptor(prototype, "value").set;
+                if(nativeInputValueSetter) {{
+                    nativeInputValueSetter.call(target, formatted);
+                    target.dispatchEvent(new Event('input', {{ bubbles: true }}));
                 }}
             }}
+        }}
+    }}
+
+    // エンターやタブでセルを移動・確定する瞬間
+    doc.addEventListener('keydown', function(e) {{
+        if (e.key === 'Enter' || e.key === 'Tab') {{
+            if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) {{
+                formatTimeInput(e.target);
+            }}
+        }}
+    }}, true);
+
+    // フォーカスが外れた瞬間
+    doc.addEventListener('focusout', function(e) {{
+        if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) {{
+            formatTimeInput(e.target);
         }}
     }}, true);
 </script>
