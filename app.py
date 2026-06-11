@@ -149,6 +149,13 @@ def calc_duration(in_time, out_time):
             return ((dt_out + timedelta(days=1)) - dt_in).total_seconds() / 3600.0
     return 0.0
 
+# 入力時に自動で「:」を入れるためのコールバック関数
+def format_time_input(key):
+    val = st.session_state.get(key, "")
+    parsed = parse_custom_time(val)
+    if parsed:
+        st.session_state[key] = parsed.strftime("%H:%M")
+
 # --- 1. ページ構成 ---
 st.set_page_config(page_title="TKG Study Room Analytics", page_icon="icon.png", layout="wide")
 
@@ -422,14 +429,19 @@ elif menu == "1件ずつ":
         k_name = f"name_{st.session_state.form_key}"
         f_name = st.text_input("氏名 (必須)", value=default_name, key=k_name, placeholder="例: 山田太郎")
 
-    default_in = (jst_now - timedelta(hours=1)).strftime("%H%M")
-    default_out = jst_now.strftime("%H%M")
+    in_key = f"single_in_{st.session_state.form_key}"
+    out_key = f"single_out_{st.session_state.form_key}"
+    
+    if in_key not in st.session_state:
+        st.session_state[in_key] = (jst_now - timedelta(hours=1)).strftime("%H:%M")
+    if out_key not in st.session_state:
+        st.session_state[out_key] = jst_now.strftime("%H:%M")
 
     col_in, col_out = st.columns(2)
     with col_in:
-        in_time_str = st.text_input("開始時間 (必須)", value=default_in, placeholder="例: 1223 (全角数字もOK)")
+        in_time_str = st.text_input("開始時間 (必須)", key=in_key, on_change=format_time_input, args=(in_key,), placeholder="例: 1223 (全角数字もOK)")
     with col_out:
-        out_time_str = st.text_input("終了時間 (必須)", value=default_out, placeholder="例: 1530 (全角数字もOK)")
+        out_time_str = st.text_input("終了時間 (必須)", key=out_key, on_change=format_time_input, args=(out_key,), placeholder="例: 1530 (全角数字もOK)")
 
     g_index = GRADES.index(default_grade) if default_grade in GRADES else 0
     f_grade = st.selectbox("学年 (※同姓同名がいる場合のみ選択)", GRADES, index=g_index)
@@ -825,9 +837,17 @@ elif menu == "管理":
                 
                 edit_name = st.text_input("氏名 (必須)", value=str(target_row['名前']), placeholder="例: 山田太郎")
                     
+                edit_in_key = f"edit_in_{target_idx}_{target_row['名前']}"
+                edit_out_key = f"edit_out_{target_idx}_{target_row['名前']}"
+                
+                if edit_in_key not in st.session_state:
+                    st.session_state[edit_in_key] = str(target_row['入室時間'])
+                if edit_out_key not in st.session_state:
+                    st.session_state[edit_out_key] = str(target_row['退室時間'])
+
                 col_in, col_out = st.columns(2)
-                with col_in: edit_in_str = st.text_input("開始時間 (例: 1223, 全角OK)", value=str(target_row['入室時間']).replace(":", ""), placeholder="例: 1223")
-                with col_out: edit_out_str = st.text_input("終了時間 (例: 1530, 全角OK)", value=str(target_row['退室時間']).replace(":", ""), placeholder="例: 1530")
+                with col_in: edit_in_str = st.text_input("開始時間 (例: 1223, 全角OK)", key=edit_in_key, on_change=format_time_input, args=(edit_in_key,), placeholder="例: 1223")
+                with col_out: edit_out_str = st.text_input("終了時間 (例: 1530, 全角OK)", key=edit_out_key, on_change=format_time_input, args=(edit_out_key,), placeholder="例: 1530")
 
                 current_grade = str(target_row['学年'])
                 if not current_grade: current_grade = "--選択--"
