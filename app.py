@@ -237,7 +237,7 @@ if "authenticated" not in st.session_state:
 if not st.session_state.authenticated:
     st.markdown("<h3 style='text-align: center; color: #0A2B56; margin-top: 15vh; margin-bottom: 30px; font-weight: 900; font-size: 2.5rem; letter-spacing: 2px;'>Study Room System</h3>", unsafe_allow_html=True)
     with st.form("login_form", clear_on_submit=False):
-        st.markdown("<p style='color: #0A2B56; font-weight: bold; margin-bottom: 5px;'> 管理用パスワードを入力してください</p>", unsafe_allow_html=True)
+        st.markdown("<p style='color: #0A2B56; font-weight: bold; margin-bottom: 5px;'>🔑 管理用パスワードを入力してください</p>", unsafe_allow_html=True)
         pwd = st.text_input("パスワード", type="password", placeholder="例: password123", label_visibility="collapsed")
         st.markdown("<br>", unsafe_allow_html=True)
         submitted = st.form_submit_button("システムにログイン", type="primary", use_container_width=True)
@@ -303,7 +303,7 @@ if menu == "一括入力":
     f_date_batch = st.date_input("利用日 (全員共通)", jst_now.date(), max_value=jst_now.date())
     
     if "batch_data" not in st.session_state:
-        st.session_state.batch_data = [{"氏名": "", "学年": "--選択--", "開始時間": "", "終了時間": ""} for _ in range(25)]
+        st.session_state.batch_data = [{"氏名": "", "開始時間": "", "終了時間": "", "学年": "--選択--"} for _ in range(25)]
         
     df_empty = pd.DataFrame(st.session_state.batch_data)
     
@@ -313,10 +313,11 @@ if menu == "一括入力":
         df_empty,
         column_config={
             "氏名": st.column_config.TextColumn("氏名 (必須)", width="medium"),
-            "学年": st.column_config.SelectboxColumn("学年 (同姓同名がいれば選択)", options=GRADES, width="medium"),
             "開始時間": st.column_config.TextColumn("開始時間 (例:1223, 全角OK)", width="small"),
             "終了時間": st.column_config.TextColumn("終了時間 (例:1530, 全角OK)", width="small"),
+            "学年": st.column_config.SelectboxColumn("学年 (同姓同名なら選択)", options=GRADES, width="small"),
         },
+        column_order=["氏名", "開始時間", "終了時間", "学年"],
         num_rows="dynamic",
         use_container_width=True,
         height=500,
@@ -385,7 +386,7 @@ if menu == "一括入力":
             if new_records:
                 df = pd.concat([df_current, pd.DataFrame(new_records)], ignore_index=True)
                 save_to_gs(df)
-                st.session_state.batch_data = [{"氏名": "", "学年": "--選択--", "開始時間": "", "終了時間": ""} for _ in range(25)]
+                st.session_state.batch_data = [{"氏名": "", "開始時間": "", "終了時間": "", "学年": "--選択--"} for _ in range(25)]
                 st.session_state.form_key += 1
                 st.session_state.sys_msg = f"{len(new_records)}名分の記録を一括保存しました。（入力欄をリセットしました）"
                 st.cache_data.clear()
@@ -401,7 +402,7 @@ elif menu == "1件ずつ":
         recent_users = df_history[['名前', '学年']].drop_duplicates(subset=['名前']).dropna()
         user_list += recent_users['名前'].tolist()
 
-    st.markdown("<p style='color:#3B82F6; font-weight:bold; margin-bottom:5px; font-size: 1.05rem;'> 過去の利用者から選ぶと自動入力されます</p>", unsafe_allow_html=True)
+    st.markdown("<p style='color:#3B82F6; font-weight:bold; margin-bottom:5px; font-size: 1.05rem;'>💡 過去の利用者から選ぶと自動入力されます</p>", unsafe_allow_html=True)
     selected_user = st.selectbox("過去の利用者検索", user_list, label_visibility="collapsed")
     
     if selected_user != "-- 新規入力 (直接入力してください) --":
@@ -418,11 +419,8 @@ elif menu == "1件ずつ":
     col1, col2 = st.columns([1, 1])
     with col1: f_date = st.date_input("利用日", jst_now.date(), max_value=jst_now.date())
     with col2: 
-        g_index = GRADES.index(default_grade) if default_grade in GRADES else 0
-        f_grade = st.selectbox("学年 (※同姓同名がいる場合のみ選択)", GRADES, index=g_index)
-        
-    k_name = f"name_{st.session_state.form_key}"
-    f_name = st.text_input("氏名 (必須)", value=default_name, key=k_name, placeholder="例: 山田太郎")
+        k_name = f"name_{st.session_state.form_key}"
+        f_name = st.text_input("氏名 (必須)", value=default_name, key=k_name, placeholder="例: 山田太郎")
 
     default_in = (jst_now - timedelta(hours=1)).strftime("%H%M")
     default_out = jst_now.strftime("%H%M")
@@ -432,6 +430,9 @@ elif menu == "1件ずつ":
         in_time_str = st.text_input("開始時間 (必須)", value=default_in, placeholder="例: 1223 (全角数字もOK)")
     with col_out:
         out_time_str = st.text_input("終了時間 (必須)", value=default_out, placeholder="例: 1530 (全角数字もOK)")
+
+    g_index = GRADES.index(default_grade) if default_grade in GRADES else 0
+    f_grade = st.selectbox("学年 (※同姓同名がいる場合のみ選択)", GRADES, index=g_index)
 
     st.markdown("<hr style='margin-top:20px; margin-bottom:20px;'>", unsafe_allow_html=True)
 
@@ -567,7 +568,7 @@ elif menu == "分析":
         
         st.markdown(f"""
         <div style='background-color: #FFFFFF; border-left: 6px solid #F59E0B; padding: 20px; border-radius: 12px; margin-top: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.05);'>
-            <div style='font-weight: 900; color: #0F172A; margin-bottom: 8px; font-size: 1.2rem;'> 翌月の着地予測</div>
+            <div style='font-weight: 900; color: #0F172A; margin-bottom: 8px; font-size: 1.2rem;'>🚀 翌月の着地予測</div>
             <div style='color: #475569; font-size: 1.05rem;'>
                 現在のペースと成長トレンドを考慮すると、来月は <b style='color: #B45309; font-size: 1.3rem;'>約 {next_month_h:.0f} 時間</b> の利用と、<b style='color: #B45309; font-size: 1.3rem;'>約 {int(next_month_u)} 名</b> の生徒の来室が見込まれます。
             </div>
@@ -706,7 +707,7 @@ elif menu == "分析":
                 if has_test: msg_parts.append("「テスト期間」")
                 if has_before: msg_parts.append("「テスト1週間前」")
                 status_str = " または ".join(msg_parts)
-                st.markdown(f"<div style='background-color: #FEF2F2; border-left: 5px solid #DC2626; padding: 15px; margin-bottom: 20px; border-radius: 8px;'><p style='color:#DC2626; font-weight:bold; margin:0;'>⚠️ 来週は{status_str}に該当する日があるため、通常より混雑が予想されます。座席数を超える時間帯にご注意ください。</p></div>", unsafe_allow_html=True)
+                st.markdown(f"<div style='background-color: #FEF2F2; border-left: 5px solid #DC2626; padding: 15px; margin-bottom: 20px; border-radius: 8px;'><p style='color:#DC2626; font-weight:bold; margin:0;'>⚠️ 来週は{status_str}に該当する日があるため、通常より混雑が予想されます。座席数（20席）を超える時間帯にご注意ください。</p></div>", unsafe_allow_html=True)
 
             if not df_recent.empty:
                 pred_period_str = (jst_today + pd.Timedelta(days=7)).strftime('%Y年%m月')
@@ -822,17 +823,16 @@ elif menu == "管理":
                 default_date = target_row['日付'].date() if pd.notnull(target_row['日付']) else jst_now.date()
                 edit_date = st.date_input("利用日", default_date)
                 
-                col_n, col_g = st.columns(2)
-                with col_n: edit_name = st.text_input("氏名 (必須)", value=str(target_row['名前']), placeholder="例: 山田太郎")
-                with col_g:
-                    current_grade = str(target_row['学年'])
-                    if not current_grade: current_grade = "--選択--"
-                    g_index = GRADES.index(current_grade) if current_grade in GRADES else 0
-                    edit_grade = st.selectbox("学年 (同姓同名がいる場合のみ)", GRADES, index=g_index)
+                edit_name = st.text_input("氏名 (必須)", value=str(target_row['名前']), placeholder="例: 山田太郎")
                     
                 col_in, col_out = st.columns(2)
                 with col_in: edit_in_str = st.text_input("開始時間 (例: 1223, 全角OK)", value=str(target_row['入室時間']).replace(":", ""), placeholder="例: 1223")
                 with col_out: edit_out_str = st.text_input("終了時間 (例: 1530, 全角OK)", value=str(target_row['退室時間']).replace(":", ""), placeholder="例: 1530")
+
+                current_grade = str(target_row['学年'])
+                if not current_grade: current_grade = "--選択--"
+                g_index = GRADES.index(current_grade) if current_grade in GRADES else 0
+                edit_grade = st.selectbox("学年 (同姓同名がいる場合のみ)", GRADES, index=g_index)
                 
                 st.markdown("<br>", unsafe_allow_html=True)
                 col_btn1, col_btn2 = st.columns(2)
