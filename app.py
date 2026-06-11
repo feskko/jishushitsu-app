@@ -344,7 +344,7 @@ elif menu == "1件ずつ":
         recent_users = df_history[['名前', '学年']].drop_duplicates(subset=['名前']).dropna()
         user_list += recent_users['名前'].tolist()
 
-    st.markdown("<p style='color:#3B82F6; font-weight:bold; margin-bottom:5px; font-size: 1.05rem;'>💡 過去の利用者から選ぶと自動入力されます</p>", unsafe_allow_html=True)
+    st.markdown("<p style='color:#3B82F6; font-weight:bold; margin-bottom:5px; font-size: 1.05rem;'> 過去の利用者から選ぶと自動入力されます</p>", unsafe_allow_html=True)
     selected_user = st.selectbox("過去の利用者検索", user_list, label_visibility="collapsed")
     
     if selected_user != "-- 新規入力 (直接入力してください) --":
@@ -518,7 +518,7 @@ elif menu == "分析":
         
         st.markdown(f"""
         <div style='background-color: #FFFFFF; border-left: 6px solid #F59E0B; padding: 20px; border-radius: 12px; margin-top: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.05);'>
-            <div style='font-weight: 900; color: #0F172A; margin-bottom: 8px; font-size: 1.2rem;'>🚀 AIによる翌月の着地予測</div>
+            <div style='font-weight: 900; color: #0F172A; margin-bottom: 8px; font-size: 1.2rem;'>翌月の着地予測</div>
             <div style='color: #475569; font-size: 1.05rem;'>
                 現在のペースと成長トレンドを考慮すると、来月は <b style='color: #B45309; font-size: 1.3rem;'>約 {next_month_h:.0f} 時間</b> の利用と、<b style='color: #B45309; font-size: 1.3rem;'>約 {int(next_month_u)} 名</b> の生徒の来室が見込まれます。
             </div>
