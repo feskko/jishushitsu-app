@@ -785,7 +785,7 @@ elif menu == "分析":
                 if has_test: msg_parts.append("「テスト期間」")
                 if has_before: msg_parts.append("「テスト1週間前」")
                 status_str = " または ".join(msg_parts)
-                st.markdown(f"<div style='background-color: #FEF2F2; border-left: 5px solid #DC2626; padding: 15px; margin-bottom: 20px; border-radius: 8px;'><p style='color:#DC2626; font-weight:bold; margin:0;'>来週は{status_str}に該当する日があるため、通常より混雑が予想されます。座席数（20席）を超える時間帯にご注意ください。</p></div>", unsafe_allow_html=True)
+                st.markdown(f"<div style='background-color: #FEF2F2; border-left: 5px solid #DC2626; padding: 15px; margin-bottom: 20px; border-radius: 8px;'><p style='color:#DC2626; font-weight:bold; margin:0;'>来週は{status_str}に該当する日があるため、通常より混雑が予想されます。座席数を超える時間帯にご注意ください。</p></div>", unsafe_allow_html=True)
 
             if not df_recent.empty:
                 pred_period_str = (jst_today + pd.Timedelta(days=7)).strftime('%Y年%m月')
