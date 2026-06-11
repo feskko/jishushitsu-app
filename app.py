@@ -158,6 +158,29 @@ def format_time_input(key):
     if parsed:
         st.session_state[key] = parsed.strftime("%H:%M")
 
+def format_batch_time():
+    editor_key = f"editor_{st.session_state.form_key}"
+    if editor_key in st.session_state:
+        state = st.session_state[editor_key]
+        if "edited_rows" in state:
+            for row_idx, row_data in state["edited_rows"].items():
+                for col in ["開始時間", "終了時間"]:
+                    if col in row_data:
+                        val = row_data[col]
+                        if val and isinstance(val, str) and ":" not in val:
+                            parsed = parse_custom_time(val)
+                            if parsed:
+                                st.session_state[editor_key]["edited_rows"][row_idx][col] = parsed.strftime("%H:%M")
+        if "added_rows" in state:
+            for row_data in state["added_rows"]:
+                for col in ["開始時間", "終了時間"]:
+                    if col in row_data:
+                        val = row_data[col]
+                        if val and isinstance(val, str) and ":" not in val:
+                            parsed = parse_custom_time(val)
+                            if parsed:
+                                row_data[col] = parsed.strftime("%H:%M")
+
 # --- 1. ページ構成 ---
 st.set_page_config(page_title="TKG Study Room Analytics", page_icon="icon.png", layout="wide")
 
@@ -375,7 +398,8 @@ if menu == "一括入力":
         num_rows="dynamic",
         use_container_width=True,
         height=500,
-        key=f"editor_{st.session_state.form_key}"
+        key=f"editor_{st.session_state.form_key}",
+        on_change=format_batch_time
     )
     
     if st.button("表のデータをすべて保存する", type="primary", use_container_width=True):
