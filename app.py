@@ -1,69 +1,86 @@
-import streamlit as st
-import pandas as pd
-from datetime import datetime, timedelta
-import gspread
-from google.oauth2.service_account import Credentials
-import json
-import os
-import base64
-import unicodedata
-import streamlit.components.v1 as components
-
-# 日本時間の「今」を取得
-jst_now = datetime.utcnow() + timedelta(hours=9)
-
-# 講習期間の判定
-def is_special_period(dt_date):
-    if dt_date is None: return False
-    m = dt_date.month
-    d = dt_date.day
-    # 春季講習: 3/15 〜 4/7
-    if (m == 3 and d >= 15) or (m == 4 and d <= 7): return True
-    # 夏期講習: 7/15 〜 8/31
-    if (m == 7 and d >= 15) or m == 8: return True
-    # 冬季講習: 12/1 〜 1/7
-    if m == 12 or (m == 1 and d <= 7): return True
-    return False
-
-# 年間のテスト期間の定義 (開始月, 開始日, 終了月, 終了日)
-TEST_PERIODS = [
-    (5, 11, 5, 20),   # 5月中旬
-    (6, 21, 6, 30),   # 6月下旬
-    (7, 1, 7, 10),    # 7月上旬
-    (9, 1, 9, 10),    # 9月上旬
-    (10, 11, 10, 20), # 10月中旬
-    (11, 1, 11, 10),  # 11月上旬
-    (12, 1, 12, 10),  # 12月上旬
-    (2, 20, 2, 29)    # 2月下旬
-]
-
-# 日付が「通常」「テスト1週間前」「テスト期間」のどれかを判定する
-def get_period_status(dt_date):
-    if dt_date is None: return "normal"
-    y = dt_date.year
-    curr_date = dt_date.date() if isinstance(dt_date, datetime) else dt_date
+# ... existing code ...
+elif menu == "一括入力":
+    st.markdown("<div class='main-title'>BATCH ENTRY PANEL</div>", unsafe_allow_html=True)
     
-    for tm1, td1, tm2, td2 in TEST_PERIODS:
-        try:
-            start_date = datetime(y, tm1, td1).date()
-            if tm2 == 2 and td2 == 29:
-                is_leap = y % 4 == 0 and (y % 100 != 0 or y % 400 == 0)
-                end_date = datetime(y, 2, 29 if is_leap else 28).date()
-            else:
-                end_date = datetime(y, tm2, td2).date()
-        except: continue
+    f_date_batch = st.date_input("利用日 (全員共通)", jst_now.date(), max_value=jst_now.date())
+    
+    if "batch_data" not in st.session_state:
+        st.session_state.batch_data = [{"氏名": "", "開始時間": "", "終了時間": "", "学年": "--選択--"} for _ in range(25)]
         
-        before_start = start_date - timedelta(days=7)
-        before_end = start_date - timedelta(days=1)
-        
-        if start_date <= curr_date <= end_date:
-            return "test"
-        elif before_start <= curr_date <= before_end:
-            return "before_test"
-            
-    return "normal"
+    df_empty = pd.DataFrame(st.session_state.batch_data)
+    
+    st.markdown("<p style='color:#64748B; font-weight:bold; margin-bottom:10px;'>同姓同名がいない場合は、学年は「--選択--」のままでも登録可能です。</p>", unsafe_allow_html=True)
+    
+    edited_df = st.data_editor(
+        df_empty,
+        column_config={
+            "氏名": st.column_config.TextColumn("氏名 (必須)", width="medium"),
+            "開始時間": st.column_config.TextColumn("開始時間 (例:1223, 全角OK)", width="small"),
+            "終了時間": st.column_config.TextColumn("終了時間 (例:1530, 全角OK)", width="small"),
+            "学年": st.column_config.SelectboxColumn("学年 (同姓同名なら選択)", options=GRADES, width="small"),
+        },
+        column_order=["氏名", "開始時間", "終了時間", "学年"],
+        num_rows="dynamic",
+        use_container_width=True,
+        height=500,
+        key=f"editor_{st.session_state.form_key}"
+    )
+# ... existing code ...
+elif menu == "1件ずつ":
+    st.markdown("<div class='main-title'>SINGLE ENTRY PANEL</div>", unsafe_allow_html=True)
+    
+    df_history = load_data()
+    user_list = ["-- 新規入力 (直接入力してください) --"]
+    recent_users = pd.DataFrame()
+    if not df_history.empty:
+        recent_users = df_history[['名前', '学年']].drop_duplicates(subset=['名前']).dropna()
+        user_list += recent_users['名前'].tolist()
 
-# 過去のデータから、テスト前・テスト中の「混雑倍率」を学習する関数
+    st.markdown("<p style='color:#3B82F6; font-weight:bold; margin-bottom:5px; font-size: 1.05rem;'>過去の利用者から選ぶと自動入力されます</p>", unsafe_allow_html=True)
+    selected_user = st.selectbox("過去の利用者検索", user_list, label_visibility="collapsed")
+    
+    if selected_user != "-- 新規入力 (直接入力してください) --":
+        default_name = selected_user
+# ... existing code ...
+    with tab3:
+        st.markdown("<div class='section-title'>来週の混雑予測（推計）</div>", unsafe_allow_html=True)
+        st.markdown("<p style='color:#64748B; font-size:1rem; font-weight: bold;'>直近4週間（過去28日間）の実際の利用データを解析し、来週の各時間帯に平均して何人の生徒が来るかを推計しています。</p>", unsafe_allow_html=True)
+        
+        if not df_ana.empty:
+            # 過去のデータから乗数を学習
+            test_mult, before_mult = learn_multipliers(df_ana)
+            
+            four_weeks_ago = jst_today - pd.Timedelta(days=28)
+            df_recent = df_ana[pd.to_datetime(df_ana['日付']) >= four_weeks_ago]
+            
+            # 来週の日付を特定し、テスト前やテスト期間が含まれるかチェック
+            target_dates = [jst_today + timedelta(days=i) for i in range(1, 8)]
+            has_test = any(get_period_status(dt) == "test" for dt in target_dates)
+            has_before = any(get_period_status(dt) == "before_test" for dt in target_dates)
+            
+            if has_test or has_before:
+                msg_parts = []
+                if has_test: msg_parts.append("「テスト期間」")
+                if has_before: msg_parts.append("「テスト1週間前」")
+                status_str = " または ".join(msg_parts)
+                st.markdown(f"<div style='background-color: #FEF2F2; border-left: 5px solid #DC2626; padding: 15px; margin-bottom: 20px; border-radius: 8px;'><p style='color:#DC2626; font-weight:bold; margin:0;'>来週は{status_str}に該当する日があるため、通常より混雑が予想されます。座席数（20席）を超える時間帯にご注意ください。</p></div>", unsafe_allow_html=True)
+
+            if not df_recent.empty:
+                pred_period_str = (jst_today + pd.Timedelta(days=7)).strftime('%Y年%m月')
+                pred_time_slots = get_time_slots_for_period(pred_period_str)
+# ... existing code ...
+                        rounded_val = int(round(val))
+                        
+                        if rounded_val >= 20:
+                            bg_color = "rgba(220, 38, 38, 0.9)"
+                            font_color = "white"
+                            display_val = "満席"
+                        elif rounded_val >= 15:
+                            bg_color = f"rgba(234, 88, 12, {max(0.6, ratio)})"
+                            font_color = "white"
+                            display_val = f"約{rounded_val}人"
+                        elif rounded_val > 0:
+# ... existing code ...# 過去のデータから、テスト前・テスト中の「混雑倍率」を学習する関数
 def learn_multipliers(df):
     default_test = 1.5   # 初期値: テスト中は1.5倍
     default_before = 1.2 # 初期値: テスト1週間前は1.2倍
