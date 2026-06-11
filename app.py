@@ -25,7 +25,7 @@ def is_special_period(dt_date):
     if m == 12 or (m == 1 and d <= 7): return True
     return False
 
-# 分析用のタイムスロット取得（月によって9時からか13時からか変える）
+# 分析用のタイムスロット取得
 def get_time_slots_for_period(period_str):
     if period_str == "累計":
         return [f"{h:02d}:00" for h in range(9, 23)]
@@ -38,6 +38,43 @@ def get_time_slots_for_period(period_str):
             return [f"{h:02d}:00" for h in range(12, 23)]
     except:
         return [f"{h:02d}:00" for h in range(9, 23)]
+
+# 時刻の柔軟なパース (1223 -> 12:23)
+def parse_custom_time(t_str):
+    if not t_str: return None
+    t_str = str(t_str).strip()
+    if t_str == "" or "コマ" in t_str: return None
+    if ":" in t_str:
+        try: return datetime.strptime(t_str[:5], "%H:%M").time()
+        except: return None
+    elif t_str.isdigit() and (len(t_str) == 3 or len(t_str) == 4):
+        try:
+            h = int(t_str[:-2])
+            m = int(t_str[-2:])
+            if 0 <= h <= 23 and 0 <= m <= 59:
+                return datetime.strptime(f"{h:02d}:{m:02d}", "%H:%M").time()
+        except: return None
+    return None
+
+# 時間計算用の関数
+def calc_duration(in_time, out_time):
+    def to_dt(t):
+        if isinstance(t, str):
+            parsed = parse_custom_time(t)
+            return datetime.combine(datetime.today(), parsed) if parsed else None
+        elif t is not None:
+            return datetime.combine(datetime.today(), t)
+        return None
+
+    dt_in = to_dt(in_time)
+    dt_out = to_dt(out_time)
+    
+    if dt_in and dt_out:
+        if dt_out >= dt_in:
+            return (dt_out - dt_in).total_seconds() / 3600.0
+        else:
+            return ((dt_out + timedelta(days=1)) - dt_in).total_seconds() / 3600.0
+    return 0.0
 
 # --- 1. ページ構成 ---
 st.set_page_config(page_title="TKG Study Room Analytics", page_icon="icon.png", layout="wide")
@@ -83,11 +120,9 @@ st.markdown("""
     button p { font-size: 1.3rem !important; margin: 0 !important; font-weight: bold; }
 
     /* メトリクス（パフォーマンスサマリー）を見やすくするCSS */
-    div[data-testid="metric-container"] { background-color: #FFFFFF; border: 1px solid #CBD5E1; border-radius: 12px; padding: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
-    div[data-testid="metric-container"] label { color: #475569 !important; font-size: 1rem !important; font-weight: bold; }
-    div[data-testid="metric-container"] div[data-testid="stMetricValue"] { color: #0A2B56 !important; font-weight: 900 !important; font-size: 2.2rem !important; }
-    div[data-testid="metric-container"] div[data-testid="stMetricDelta"] { font-size: 1.1rem !important; font-weight: bold !important; }
-    div[data-testid="metric-container"] div[data-testid="stMetricDelta"] svg { fill: currentColor !important; }
+    div[data-testid="stMetric"] { background-color: #FFFFFF; border: 1px solid #CBD5E1; border-radius: 12px; padding: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+    [data-testid="stMetricValue"] > div, [data-testid="stMetricValue"] { color: #0A2B56 !important; font-weight: 900 !important; font-size: 2.4rem !important; }
+    [data-testid="stMetricLabel"] p, [data-testid="stMetricLabel"] { color: #475569 !important; font-size: 1.05rem !important; font-weight: bold !important; }
 
     @media (min-width: 768px) { 
         .main-title { font-size: 2.4rem; } .section-title { font-size: 1.6rem; } div[role="radiogroup"] { max-width: 600px; } .rank-card { flex: 1; min-width: 30%; padding: 25px; border-radius: 16px; border: 1px solid #E2E8F0; } div[data-baseweb="input"] > div, div[data-baseweb="select"] > div { height: 3.2rem; }
@@ -157,32 +192,6 @@ def save_to_gs(df, sheet_name="メイン"):
     else:
         worksheet.update(range_name="A1", values=[['日付', '名前', '学年', '入室時間', '退室時間', '利用時間（時間）']])
 
-# 時間計算用の関数
-def calc_duration(in_time, out_time):
-    def to_dt(t):
-        if isinstance(t, str):
-            t = str(t).strip()
-            if "コマ" in t: return None # 旧形式のデータは無視
-            try:
-                parts = t.split(":")
-                if len(parts) >= 2:
-                    return datetime.combine(datetime.today(), datetime.strptime(f"{int(parts[0]):02d}:{int(parts[1]):02d}", "%H:%M").time())
-            except: return None
-        elif t is not None:
-            return datetime.combine(datetime.today(), t)
-        return None
-
-    dt_in = to_dt(in_time)
-    dt_out = to_dt(out_time)
-    
-    if dt_in and dt_out:
-        if dt_out >= dt_in:
-            return (dt_out - dt_in).total_seconds() / 3600.0
-        else:
-            # 日またぎの考慮
-            return ((dt_out + timedelta(days=1)) - dt_in).total_seconds() / 3600.0
-    return 0.0
-
 if "form_key" not in st.session_state: st.session_state.form_key = 0
 
 GRADES = ["--選択--"] + [f"小{i}" for i in range(1, 7)] + [f"中{i}" for i in range(1, 4)] + [f"高{i}" for i in range(1, 4)] + ["既卒/その他"]
@@ -202,7 +211,7 @@ if menu == "一括入力":
     f_date_batch = st.date_input("利用日 (全員共通)", jst_now.date(), max_value=jst_now.date())
     
     if "batch_data" not in st.session_state:
-        st.session_state.batch_data = [{"氏名": "", "学年": "--選択--", "開始時間": None, "終了時間": None} for _ in range(25)]
+        st.session_state.batch_data = [{"氏名": "", "学年": "--選択--", "開始時間": "", "終了時間": ""} for _ in range(25)]
         
     df_empty = pd.DataFrame(st.session_state.batch_data)
     
@@ -211,8 +220,8 @@ if menu == "一括入力":
         column_config={
             "氏名": st.column_config.TextColumn("氏名", width="medium"),
             "学年": st.column_config.SelectboxColumn("学年", options=GRADES, width="small"),
-            "開始時間": st.column_config.TimeColumn("開始時間", format="HH:mm", step=60*15, width="small"),
-            "終了時間": st.column_config.TimeColumn("終了時間", format="HH:mm", step=60*15, width="small"),
+            "開始時間": st.column_config.TextColumn("開始時間 (例:1223)", width="small"),
+            "終了時間": st.column_config.TextColumn("終了時間 (例:1530)", width="small"),
         },
         num_rows="dynamic",
         use_container_width=True,
@@ -232,30 +241,30 @@ if menu == "一括入力":
             for idx, row in valid_rows.iterrows():
                 name = row["氏名"].replace(" ", "").replace("　", "")
                 grade = row["学年"]
-                in_raw = row["開始時間"]
-                out_raw = row["終了時間"]
                 
                 if grade == "--選択--":
                     error_msgs.append(f"{name}さん (学年が選択されていません)")
                     continue
                 
-                if in_raw is None or out_raw is None or pd.isna(in_raw) or pd.isna(out_raw):
-                    error_msgs.append(f"{name}さん (開始・終了時間が未入力です)")
+                in_dt_time = parse_custom_time(row["開始時間"])
+                out_dt_time = parse_custom_time(row["終了時間"])
+                
+                if in_dt_time is None or out_dt_time is None:
+                    error_msgs.append(f"{name}さん (開始・終了時間を正しく入力してください)")
                     continue
                     
                 # 講習期間外の午前中入力チェック
-                in_dt = in_raw if not isinstance(in_raw, str) else datetime.strptime(in_raw[:5], "%H:%M").time()
-                if not is_special_period(f_date_batch) and in_dt.hour < 12:
+                if not is_special_period(f_date_batch) and in_dt_time.hour < 12:
                     error_msgs.append(f"{name}さん (通常期間は12時以降を入力してください)")
                     continue
                 
-                duration = calc_duration(in_raw, out_raw)
+                duration = calc_duration(in_dt_time, out_dt_time)
                 if duration <= 0:
                     error_msgs.append(f"{name}さん (終了時間が開始時間より前になっています)")
                     continue
                 
-                in_str = in_raw.strftime("%H:%M") if not isinstance(in_raw, str) else in_raw[:5]
-                out_str = out_raw.strftime("%H:%M") if not isinstance(out_raw, str) else out_raw[:5]
+                in_str = in_dt_time.strftime("%H:%M")
+                out_str = out_dt_time.strftime("%H:%M")
                 
                 is_dup_current = not df_current[
                     (df_current['日付'] == pd.to_datetime(f_date_batch)) & 
@@ -287,7 +296,7 @@ if menu == "一括入力":
             if new_records:
                 df = pd.concat([df_current, pd.DataFrame(new_records)], ignore_index=True)
                 save_to_gs(df)
-                st.session_state.batch_data = [{"氏名": "", "学年": "--選択--", "開始時間": None, "終了時間": None} for _ in range(25)]
+                st.session_state.batch_data = [{"氏名": "", "学年": "--選択--", "開始時間": "", "終了時間": ""} for _ in range(25)]
                 st.session_state.form_key += 1
                 st.session_state.sys_msg = f"{len(new_records)}名分の記録を一括保存しました。（入力欄をリセットしました）"
                 st.cache_data.clear()
@@ -295,26 +304,58 @@ if menu == "一括入力":
 
 elif menu == "1件ずつ":
     st.markdown("<div class='main-title'>SINGLE ENTRY PANEL</div>", unsafe_allow_html=True)
+    
+    # 過去データからサジェスト用リストを作成
+    df_history = load_data()
+    user_list = ["-- 新規入力 (直接入力してください) --"]
+    recent_users = pd.DataFrame()
+    if not df_history.empty:
+        recent_users = df_history[['名前', '学年']].drop_duplicates(subset=['名前']).dropna()
+        user_list += recent_users['名前'].tolist()
+
+    st.markdown("<p style='color:#475569; font-weight:bold; margin-bottom:5px;'>💡 過去の利用者から選ぶと自動入力されます</p>", unsafe_allow_html=True)
+    selected_user = st.selectbox("過去の利用者", user_list, label_visibility="collapsed")
+    
+    if selected_user != "-- 新規入力 (直接入力してください) --":
+        default_name = selected_user
+        try:
+            default_grade = recent_users[recent_users['名前'] == selected_user]['学年'].values[0]
+        except:
+            default_grade = "--選択--"
+    else:
+        default_name = ""
+        default_grade = "--選択--"
+
     col1, col2 = st.columns([1, 1])
     with col1: f_date = st.date_input("利用日", jst_now.date(), max_value=jst_now.date())
-    with col2: f_grade = st.selectbox("学年", GRADES, index=0)
+    with col2: 
+        g_index = GRADES.index(default_grade) if default_grade in GRADES else 0
+        f_grade = st.selectbox("学年", GRADES, index=g_index)
         
     k_name = f"name_{st.session_state.form_key}"
-    f_name = st.text_input("氏名", key=k_name)
+    f_name = st.text_input("氏名", value=default_name, key=k_name)
+
+    # デフォルトで開始時間を1時間前、終了時間を現在時刻にセット
+    default_in = (jst_now - timedelta(hours=1)).strftime("%H%M")
+    default_out = jst_now.strftime("%H%M")
 
     col_in, col_out = st.columns(2)
     with col_in:
-        in_time = st.time_input("開始時間", value=None)
+        in_time_str = st.text_input("開始時間 (例: 1223)", value=default_in)
     with col_out:
-        out_time = st.time_input("終了時間", value=None)
+        out_time_str = st.text_input("終了時間 (例: 1530)", value=default_out)
 
     st.markdown("<hr style='margin-top:20px; margin-bottom:20px;'>", unsafe_allow_html=True)
 
     if st.button("1件記録する", use_container_width=True, type="primary"):
         f_name_clean = f_name.replace(" ", "").replace("　", "")
+        
+        in_time = parse_custom_time(in_time_str)
+        out_time = parse_custom_time(out_time_str)
+        
         if not f_name_clean: st.error("氏名を入力してください。")
         elif f_grade == "--選択--": st.error("学年を選択してください。")
-        elif in_time is None or out_time is None: st.error("開始時間と終了時間の両方を入力してください。")
+        elif in_time is None or out_time is None: st.error("開始時間と終了時間を正しく入力してください。(例: 1530)")
         elif not is_special_period(f_date) and in_time.hour < 12: st.error("通常期間は12時以降を入力してください。")
         else:
             duration = calc_duration(in_time, out_time)
@@ -424,12 +465,33 @@ elif menu == "分析":
             diff_avg = avg_this - avg_last
             pct_avg = (diff_avg / avg_last * 100) if avg_last > 0 else (100 if avg_this > 0 else 0)
             col_met3.metric("1人あたり平均学習時間", f"{avg_this:.1f} 時間", f"{pct_avg:+.1f}% ({diff_avg:+.1f} 時間)")
+            
+        # --- 翌月の利用予測 ---
+        today_d = jst_today.day
+        next_month_first = (jst_today.replace(day=1) + timedelta(days=32)).replace(day=1)
+        days_in_month = (next_month_first - timedelta(days=1)).day
+        
+        proj_hours_this_month = hours_this / today_d * days_in_month if today_d > 0 else 0
+        
+        # 成長トレンドを加味（変動幅を制限して現実的な数字に）
+        growth_rate_h = pct_hours / 100.0 if pct_hours != 100 else 0
+        next_month_h = proj_hours_this_month * (1 + max(min(growth_rate_h, 0.15), -0.15))
+        next_month_u = users_this * (1 + max(min((pct_users / 100.0), 0.1), -0.1))
+        
+        st.markdown(f"""
+        <div style='background-color: #FFFFFF; border-left: 5px solid #F59E0B; padding: 15px 20px; border-radius: 8px; margin-top: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);'>
+            <div style='font-weight: 900; color: #0A2B56; margin-bottom: 5px; font-size: 1.1rem;'>🚀 AIによる翌月の着地予測</div>
+            <div style='color: #475569; font-size: 1rem;'>
+                現在のペースと成長トレンドを考慮すると、来月は <b>約 {next_month_h:.0f} 時間</b> の利用と、<b>約 {int(next_month_u)} 名</b> の生徒の来室が見込まれます。
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
     else:
         st.info("データが蓄積されると前月比の利用率が表示されます。")
         
     st.markdown("<hr style='margin: 30px 0;'>", unsafe_allow_html=True)
 
-    tab1, tab2, tab3 = st.tabs(["混雑状況", "生徒個別", "翌週の予測"])
+    tab1, tab2, tab3 = st.tabs(["混雑状況", "生徒個別", "来週の予測"])
 
     def get_active_slots(in_str, out_str, slots_list):
         def parse_time(t_str):
@@ -633,24 +695,19 @@ elif menu == "管理":
                     current_grade = str(target_row['学年'])
                     g_index = GRADES.index(current_grade) if current_grade in GRADES else 0
                     edit_grade = st.selectbox("学年", GRADES, index=g_index)
-                
-                def parse_time_str(t_str):
-                    if "コマ" in str(t_str): return None
-                    try:
-                        parts = str(t_str).split(":")
-                        if len(parts) >= 2:
-                            return datetime.strptime(f"{int(parts[0]):02d}:{int(parts[1]):02d}", "%H:%M").time()
-                    except: return None
                     
                 col_in, col_out = st.columns(2)
-                with col_in: edit_in = st.time_input("開始時間", value=parse_time_str(target_row['入室時間']))
-                with col_out: edit_out = st.time_input("終了時間", value=parse_time_str(target_row['退室時間']))
+                with col_in: edit_in_str = st.text_input("開始時間 (例: 1223)", value=str(target_row['入室時間']).replace(":", ""))
+                with col_out: edit_out_str = st.text_input("終了時間 (例: 1530)", value=str(target_row['退室時間']).replace(":", ""))
                 
                 st.markdown("<br>", unsafe_allow_html=True)
                 col_btn1, col_btn2 = st.columns(2)
                 with col_btn1:
                     if st.button("この内容で上書き保存", use_container_width=True, type="primary"):
                         edit_name_clean = edit_name.replace(" ", "").replace("　", "")
+                        
+                        edit_in = parse_custom_time(edit_in_str)
+                        edit_out = parse_custom_time(edit_out_str)
                         
                         if edit_name_clean:
                             if edit_grade == "--選択--": st.error("学年を選択してください。")
