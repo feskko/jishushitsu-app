@@ -237,7 +237,7 @@ if "authenticated" not in st.session_state:
 if not st.session_state.authenticated:
     st.markdown("<h3 style='text-align: center; color: #0A2B56; margin-top: 15vh; margin-bottom: 30px; font-weight: 900; font-size: 2.5rem; letter-spacing: 2px;'>Study Room System</h3>", unsafe_allow_html=True)
     with st.form("login_form", clear_on_submit=False):
-        st.markdown("<p style='color: #0A2B56; font-weight: bold; margin-bottom: 5px;'>🔑 管理用パスワードを入力してください</p>", unsafe_allow_html=True)
+        st.markdown("<p style='color: #0A2B56; font-weight: bold; margin-bottom: 5px;'> 管理用パスワードを入力してください</p>", unsafe_allow_html=True)
         pwd = st.text_input("パスワード", type="password", placeholder="例: password123", label_visibility="collapsed")
         st.markdown("<br>", unsafe_allow_html=True)
         submitted = st.form_submit_button("システムにログイン", type="primary", use_container_width=True)
@@ -401,7 +401,7 @@ elif menu == "1件ずつ":
         recent_users = df_history[['名前', '学年']].drop_duplicates(subset=['名前']).dropna()
         user_list += recent_users['名前'].tolist()
 
-    st.markdown("<p style='color:#3B82F6; font-weight:bold; margin-bottom:5px; font-size: 1.05rem;'>💡 過去の利用者から選ぶと自動入力されます</p>", unsafe_allow_html=True)
+    st.markdown("<p style='color:#3B82F6; font-weight:bold; margin-bottom:5px; font-size: 1.05rem;'> 過去の利用者から選ぶと自動入力されます</p>", unsafe_allow_html=True)
     selected_user = st.selectbox("過去の利用者検索", user_list, label_visibility="collapsed")
     
     if selected_user != "-- 新規入力 (直接入力してください) --":
@@ -567,7 +567,7 @@ elif menu == "分析":
         
         st.markdown(f"""
         <div style='background-color: #FFFFFF; border-left: 6px solid #F59E0B; padding: 20px; border-radius: 12px; margin-top: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.05);'>
-            <div style='font-weight: 900; color: #0F172A; margin-bottom: 8px; font-size: 1.2rem;'>🚀 翌月の着地予測</div>
+            <div style='font-weight: 900; color: #0F172A; margin-bottom: 8px; font-size: 1.2rem;'> 翌月の着地予測</div>
             <div style='color: #475569; font-size: 1.05rem;'>
                 現在のペースと成長トレンドを考慮すると、来月は <b style='color: #B45309; font-size: 1.3rem;'>約 {next_month_h:.0f} 時間</b> の利用と、<b style='color: #B45309; font-size: 1.3rem;'>約 {int(next_month_u)} 名</b> の生徒の来室が見込まれます。
             </div>
@@ -706,7 +706,7 @@ elif menu == "分析":
                 if has_test: msg_parts.append("「テスト期間」")
                 if has_before: msg_parts.append("「テスト1週間前」")
                 status_str = " または ".join(msg_parts)
-                st.markdown(f"<div style='background-color: #FEF2F2; border-left: 5px solid #DC2626; padding: 15px; margin-bottom: 20px; border-radius: 8px;'><p style='color:#DC2626; font-weight:bold; margin:0;'>⚠️ 来週は{status_str}に該当する日があるため、通常より混雑が予想されます。座席数（20席）を超える時間帯にご注意ください。</p></div>", unsafe_allow_html=True)
+                st.markdown(f"<div style='background-color: #FEF2F2; border-left: 5px solid #DC2626; padding: 15px; margin-bottom: 20px; border-radius: 8px;'><p style='color:#DC2626; font-weight:bold; margin:0;'>⚠️ 来週は{status_str}に該当する日があるため、通常より混雑が予想されます。座席数を超える時間帯にご注意ください。</p></div>", unsafe_allow_html=True)
 
             if not df_recent.empty:
                 pred_period_str = (jst_today + pd.Timedelta(days=7)).strftime('%Y年%m月')
