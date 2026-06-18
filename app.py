@@ -583,7 +583,7 @@ elif menu == "ランキング":
         })
 
     if not df.empty:
-        tab1, tab2, tab3 = st.tabs(["今月の集計", "直近3ヶ月", "累計"])
+        tab1, tab2, tab3, tab4 = st.tabs(["今月の集計", "前月の集計", "直近3ヶ月", "累計"])
         def get_agg(target_df):
             if target_df.empty: return pd.DataFrame()
             return target_df.groupby(['名前', '学年'])['利用時間（時間）'].sum().reset_index().sort_values(by='利用時間（時間）', ascending=False).reset_index(drop=True)
@@ -591,7 +591,19 @@ elif menu == "ランキング":
         jst_today = pd.Timestamp(jst_now.date())
         df_vp = df[df['日付'] <= jst_today]
         
-        for tab, agg_data in zip([tab1, tab2, tab3], [get_agg(df_vp[(df_vp['日付'].dt.year == jst_today.year) & (df_vp['日付'].dt.month == jst_today.month)]), get_agg(df_vp[df_vp['日付'] >= (jst_today - pd.DateOffset(months=3))]), get_agg(df_vp)]):
+        # 今月のデータ
+        df_this_month = df_vp[(df_vp['日付'].dt.year == jst_today.year) & (df_vp['日付'].dt.month == jst_today.month)]
+        
+        # 前月のデータ
+        first_day_of_this_month = jst_today.replace(day=1)
+        last_day_of_last_month = first_day_of_this_month - pd.Timedelta(days=1)
+        first_day_of_last_month = last_day_of_last_month.replace(day=1)
+        df_last_month = df_vp[(df_vp['日付'] >= first_day_of_last_month) & (df_vp['日付'] <= last_day_of_last_month)]
+        
+        # 直近3ヶ月のデータ
+        df_3months = df_vp[df_vp['日付'] >= (jst_today - pd.DateOffset(months=3))]
+        
+        for tab, agg_data in zip([tab1, tab2, tab3, tab4], [get_agg(df_this_month), get_agg(df_last_month), get_agg(df_3months), get_agg(df_vp)]):
             with tab:
                 if agg_data.empty: st.info("データがありません。")
                 else:
@@ -646,7 +658,7 @@ elif menu == "分析":
         
         st.markdown(f"""
         <div style='background-color: #FFFFFF; border-left: 6px solid #F59E0B; padding: 20px; border-radius: 12px; margin-top: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.05);'>
-            <div style='font-weight: 900; color: #0F172A; margin-bottom: 8px; font-size: 1.2rem;'>翌月の着地予測</div>
+            <div style='font-weight: 900; color: #0F172A; margin-bottom: 8px; font-size: 1.2rem;'>🚀 翌月の着地予測</div>
             <div style='color: #475569; font-size: 1.05rem;'>
                 現在のペースと成長トレンドを考慮すると、来月は <b style='color: #B45309; font-size: 1.3rem;'>約 {next_month_h:.0f} 時間</b> の利用と、<b style='color: #B45309; font-size: 1.3rem;'>約 {int(next_month_u)} 名</b> の生徒の来室が見込まれます。
             </div>
