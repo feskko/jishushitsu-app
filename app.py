@@ -377,7 +377,7 @@ if menu == "一括入力":
         
     df_empty = pd.DataFrame(st.session_state.batch_data)
     
-    st.markdown("<p style='color:#64748B; font-weight:bold; margin-bottom:10px;'>同姓同名がいない場合は、学年は「--選択--」のままでも登録可能です。</p>", unsafe_allow_html=True)
+    st.markdown("<p style='color:#64748B; font-weight:bold; margin-bottom:10px;'>💡 全ての項目（学年を含む）を入力してください。</p>", unsafe_allow_html=True)
     
     edited_df = st.data_editor(
         df_empty,
@@ -385,7 +385,7 @@ if menu == "一括入力":
             "氏名": st.column_config.TextColumn("氏名 (必須)", width="medium"),
             "開始時間": st.column_config.TextColumn("開始時間 (例:1223, 全角OK)", width="small"),
             "終了時間": st.column_config.TextColumn("終了時間 (例:1530, 全角OK)", width="small"),
-            "学年": st.column_config.SelectboxColumn("学年 (同姓同名なら選択)", options=GRADES, width="small"),
+            "学年": st.column_config.SelectboxColumn("学年 (必須)", options=GRADES, width="small"),
         },
         column_order=["氏名", "開始時間", "終了時間", "学年"],
         num_rows="dynamic",
@@ -405,8 +405,12 @@ if menu == "一括入力":
             
             for idx, row in valid_rows.iterrows():
                 name = row["氏名"].replace(" ", "").replace("　", "")
-                grade_input = row["学年"]
-                grade = grade_input if grade_input != "--選択--" else "" 
+                grade_input = row.get("学年")
+                
+                if pd.isna(grade_input) or grade_input == "--選択--" or not grade_input:
+                    error_msgs.append(f"{name}さん (学年が選択されていません)")
+                    continue
+                grade = grade_input
                 
                 in_dt_time = parse_custom_time(row["開始時間"])
                 out_dt_time = parse_custom_time(row["終了時間"])
@@ -475,7 +479,7 @@ elif menu == "1件ずつ":
         recent_users = df_history[['名前', '学年']].drop_duplicates(subset=['名前']).dropna()
         user_list += recent_users['名前'].tolist()
 
-    st.markdown("<p style='color:#3B82F6; font-weight:bold; margin-bottom:5px; font-size: 1.05rem;'>過去の利用者から選ぶと自動入力されます</p>", unsafe_allow_html=True)
+    st.markdown("<p style='color:#3B82F6; font-weight:bold; margin-bottom:5px; font-size: 1.05rem;'>💡 過去の利用者から選ぶと自動入力されます</p>", unsafe_allow_html=True)
     selected_user = st.selectbox("過去の利用者検索", user_list, label_visibility="collapsed")
     
     if selected_user != "-- 新規入力 (直接入力してください) --":
@@ -510,18 +514,19 @@ elif menu == "1件ずつ":
         out_time_str = st.text_input("終了時間 (必須)", key=out_key, on_change=format_time_input, args=(out_key,), placeholder="例: 1530 (全角数字もOK)")
 
     g_index = GRADES.index(default_grade) if default_grade in GRADES else 0
-    f_grade = st.selectbox("学年 (※同姓同名がいる場合のみ選択)", GRADES, index=g_index)
+    f_grade = st.selectbox("学年 (必須)", GRADES, index=g_index)
 
     st.markdown("<hr style='margin-top:20px; margin-bottom:20px;'>", unsafe_allow_html=True)
 
     if st.button("この内容で1件記録する", use_container_width=True, type="primary"):
         f_name_clean = f_name.replace(" ", "").replace("　", "")
-        grade_to_save = f_grade if f_grade != "--選択--" else ""
+        grade_to_save = f_grade
         
         in_time = parse_custom_time(in_time_str)
         out_time = parse_custom_time(out_time_str)
         
         if not f_name_clean: st.error("氏名を入力してください。")
+        elif grade_to_save == "--選択--": st.error("学年を選択してください。")
         elif in_time is None or out_time is None: st.error("開始時間と終了時間を正しく入力してください。(例: 1530 または １５３０)")
         elif not is_special_period(f_date) and in_time.hour < 12: st.error("通常期間は12時以降を入力してください。")
         else:
@@ -930,20 +935,21 @@ elif menu == "管理":
                 current_grade = str(target_row['学年'])
                 if not current_grade: current_grade = "--選択--"
                 g_index = GRADES.index(current_grade) if current_grade in GRADES else 0
-                edit_grade = st.selectbox("学年 (同姓同名がいる場合のみ)", GRADES, index=g_index)
+                edit_grade = st.selectbox("学年 (必須)", GRADES, index=g_index)
                 
                 st.markdown("<br>", unsafe_allow_html=True)
                 col_btn1, col_btn2 = st.columns(2)
                 with col_btn1:
                     if st.button("この内容で上書き保存", use_container_width=True, type="primary"):
                         edit_name_clean = edit_name.replace(" ", "").replace("　", "")
-                        grade_to_save = edit_grade if edit_grade != "--選択--" else ""
+                        grade_to_save = edit_grade
                         
                         edit_in = parse_custom_time(edit_in_str)
                         edit_out = parse_custom_time(edit_out_str)
                         
                         if edit_name_clean:
-                            if edit_in is None or edit_out is None: st.error("開始と終了時間を正しく入力してください。")
+                            if grade_to_save == "--選択--": st.error("学年を選択してください。")
+                            elif edit_in is None or edit_out is None: st.error("開始と終了時間を正しく入力してください。")
                             elif not is_special_period(edit_date) and edit_in.hour < 12: st.error("通常期間は12時以降を入力してください。")
                             else:
                                 duration = calc_duration(edit_in, edit_out)
