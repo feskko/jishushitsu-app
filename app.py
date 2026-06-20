@@ -387,7 +387,7 @@ if menu == "一括入力":
             "終了時間": st.column_config.TextColumn("終了時間 (例:1530, 全角OK)", width="small"),
             "学年": st.column_config.SelectboxColumn("学年 (必須)", options=GRADES, width="small"),
         },
-        column_order=["氏名", "開始時間", "終了時間", "学年"],
+        column_order=["学年", "氏名", "開始時間", "終了時間"],
         num_rows="dynamic",
         use_container_width=True,
         height=500,
