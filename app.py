@@ -610,13 +610,41 @@ elif menu == "ランキング":
         # 直近3ヶ月のデータ
         df_3months = df_vp[df_vp['日付'] >= (jst_today - pd.DateOffset(months=3))]
         
-        for tab, agg_data in zip([tab1, tab2, tab3, tab4], [get_agg(df_this_month), get_agg(df_last_month), get_agg(df_3months), get_agg(df_vp)]):
+        for tab, agg_data, period_name in zip([tab1, tab2, tab3, tab4], 
+                                              [get_agg(df_this_month), get_agg(df_last_month), get_agg(df_3months), get_agg(df_vp)],
+                                              ["今月", f"{last_month_num}月", "直近3ヶ月", "累計"]):
             with tab:
                 if agg_data.empty: st.info("データがありません。")
                 else:
                     render_section_ranking(agg_data, [f"小{i}" for i in range(1, 7)], "小学生の部")
                     render_section_ranking(agg_data, [f"中{i}" for i in range(1, 4)], "中学生の部")
-                    render_section_ranking(agg_data, [f"高{i}" for i in range(1, 4)] + ["既卒/その他", ""], "高校生・その他・学年未設定")
+                    render_section_ranking(agg_data, ["高1", "高2"], "高1・高2の部")
+                    render_section_ranking(agg_data, ["高3", "既卒/その他", ""], "高3・その他の部")
+                    
+                    st.markdown("---")
+                    st.markdown("##### 📋 PowerPoint貼り付け用データ (上位5名)")
+                    
+                    copy_text = f"期間：{period_name}度\n\n"
+                    
+                    sections = [
+                        ("【 小学生の部 】", [f"小{i}" for i in range(1, 7)]),
+                        ("【 中学生の部 】", [f"中{i}" for i in range(1, 4)]),
+                        ("【 高1・高2の部 】", ["高1", "高2"]),
+                        ("【 高3・その他の部 】", ["高3", "既卒/その他", ""])
+                    ]
+                    
+                    for sec_name, grades in sections:
+                        sec_df = agg_data[agg_data['学年'].isin(grades)].reset_index(drop=True)
+                        if not sec_df.empty:
+                            sec_df['順位'] = sec_df['利用時間（時間）'].rank(method='min', ascending=False).astype(int)
+                            top5 = sec_df[sec_df['順位'] <= 5].sort_values('順位')
+                            copy_text += f"{sec_name}\n順位\tイニシャル\t時間\n"
+                            for _, row in top5.iterrows():
+                                copy_text += f"{row['順位']}位\t{row['名前']}さん\t{row['利用時間（時間）']:.1f}h\n"
+                        copy_text += "\n"
+                        
+                    st.code(copy_text, language="text")
+
     else: st.info("データがありません。最初の記録を登録してください。")
 
 elif menu == "分析":
@@ -873,4 +901,107 @@ elif menu == "分析":
                             
                         html += f"<td style='border: 1px solid #CBD5E1; padding: 10px; text-align: center; font-size:0.85rem; font-weight: bold; background-color: {bg_color}; color: {font_color};'>{display_val}</td>"
                     html += "</tr>"
-                html
+                html += "</table></div>"
+                st.markdown(html, unsafe_allow_html=True)
+            else:
+                st.info("直近4週間のデータがないため、予測を計算できません。")
+        else:
+            st.info("集計するデータがありません。")
+
+elif menu == "管理":
+    st.markdown("<div class='main-title'>ADMIN PANEL</div>", unsafe_allow_html=True)
+    df_manage = load_data()
+    
+    if not df_manage.empty:
+        tab_edit, tab_del = st.tabs(["1件ずつ編集", "複数の一括削除"])
+        
+        options = []
+        for i in reversed(df_manage.index):
+            row = df_manage.loc[i]
+            d_str = row['日付'].strftime('%m/%d') if pd.notnull(row['日付']) else "不明"
+            options.append((str(i), f"{d_str} | {row['名前']} ({row['入室時間']} - {row['退室時間']})"))
+            
+        with tab_del:
+            st.markdown("##### まとめて削除")
+            selected_dels = st.multiselect("削除する記録を選択してください", options, format_func=lambda x: x[1])
+            
+            if st.button("選択した記録を完全に削除", type="primary"):
+                if selected_dels:
+                    indices_to_drop = [int(x[0]) for x in selected_dels]
+                    df_manage = df_manage.drop(indices_to_drop).reset_index(drop=True)
+                    save_to_gs(df_manage)
+                    st.session_state.sys_msg = f"{len(indices_to_drop)}件の記録を削除しました。"
+                    st.cache_data.clear()
+                    st.rerun()
+                else:
+                    st.warning("削除する記録が選択されていません。")
+
+        with tab_edit:
+            st.markdown("##### 記録の編集")
+            selected_mng = st.selectbox("編集する記録", [("-1", "-- 選択してください --")] + options[:50], format_func=lambda x: x[1])
+            
+            if selected_mng[0] != "-1":
+                target_idx = int(selected_mng[0])
+                target_row = df_manage.loc[target_idx]
+                st.markdown("<div style='margin-top: 10px; padding: 25px; border-radius: 12px; background-color: #FFFFFF; border: 1px solid #E2E8F0; box-shadow: 0 4px 6px rgba(0,0,0,0.05);'>", unsafe_allow_html=True)
+                
+                default_date = target_row['日付'].date() if pd.notnull(target_row['日付']) else jst_now.date()
+                edit_date = st.date_input("利用日", default_date)
+                
+                edit_name = st.text_input("氏名 (必須)", value=str(target_row['名前']), placeholder="例: 山田太郎")
+                
+                edit_in_key = f"edit_in_{target_idx}_{target_row['名前']}"
+                edit_out_key = f"edit_out_{target_idx}_{target_row['名前']}"
+                
+                if edit_in_key not in st.session_state:
+                    st.session_state[edit_in_key] = str(target_row['入室時間'])
+                if edit_out_key not in st.session_state:
+                    st.session_state[edit_out_key] = str(target_row['退室時間'])
+
+                col_in, col_out = st.columns(2)
+                with col_in: edit_in_str = st.text_input("開始時間 (例: 1223, 全角OK)", key=edit_in_key, on_change=format_time_input, args=(edit_in_key,), placeholder="例: 1223")
+                with col_out: edit_out_str = st.text_input("終了時間 (例: 1530, 全角OK)", key=edit_out_key, on_change=format_time_input, args=(edit_out_key,), placeholder="例: 1530")
+
+                current_grade = str(target_row['学年'])
+                if not current_grade: current_grade = "--選択--"
+                g_index = GRADES.index(current_grade) if current_grade in GRADES else 0
+                edit_grade = st.selectbox("学年 (必須)", GRADES, index=g_index)
+                
+                st.markdown("<br>", unsafe_allow_html=True)
+                col_btn1, col_btn2 = st.columns(2)
+                with col_btn1:
+                    if st.button("この内容で上書き保存", use_container_width=True, type="primary"):
+                        edit_name_clean = edit_name.replace(" ", "").replace("　", "")
+                        grade_to_save = edit_grade
+                        
+                        edit_in = parse_custom_time(edit_in_str)
+                        edit_out = parse_custom_time(edit_out_str)
+                        
+                        if edit_name_clean:
+                            if grade_to_save == "--選択--": st.error("学年を選択してください。")
+                            elif edit_in is None or edit_out is None: st.error("開始と終了時間を正しく入力してください。")
+                            elif not is_special_period(edit_date) and edit_in.hour < 12: st.error("通常期間は12時以降を入力してください。")
+                            else:
+                                duration = calc_duration(edit_in, edit_out)
+                                if duration <= 0: st.error("終了時間は開始時間以降に設定してください")
+                                else:
+                                    df_manage.at[target_idx, '日付'] = pd.to_datetime(edit_date)
+                                    df_manage.at[target_idx, '名前'] = edit_name_clean
+                                    df_manage.at[target_idx, '学年'] = grade_to_save
+                                    df_manage.at[target_idx, '入室時間'] = edit_in.strftime("%H:%M")
+                                    df_manage.at[target_idx, '退室時間'] = edit_out.strftime("%H:%M")
+                                    df_manage.at[target_idx, '利用時間（時間）'] = duration
+                                    save_to_gs(df_manage)
+                                    st.session_state.sys_msg = "記録を更新しました。"
+                                    st.cache_data.clear()
+                                    st.rerun()
+                        else: st.error("氏名を入力してください。")
+                with col_btn2:
+                    if st.button("この記録を完全に削除", use_container_width=True):
+                        df_manage = df_manage.drop(target_idx).reset_index(drop=True)
+                        save_to_gs(df_manage)
+                        st.session_state.sys_msg = "削除しました。"
+                        st.cache_data.clear()
+                        st.rerun()
+                st.markdown("</div>", unsafe_allow_html=True)
+    else: st.info("変更・削除できるデータがありません。")
