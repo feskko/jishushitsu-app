@@ -367,7 +367,7 @@ if st.session_state.sys_err:
     st.error(st.session_state.sys_err)
     st.session_state.sys_err = None
 
-# --- 入力漏れチェック (今月の1日から昨日まで、日曜除く) ---
+# --- 入力漏れチェック (今月の1日から昨日まで) ---
 df_check = load_data()
 today_date = jst_now.date()
 first_day = today_date.replace(day=1)
@@ -385,7 +385,7 @@ missing_warning_html = ""
 if missing_dates:
     weekdays_ja = ["月", "火", "水", "木", "金", "土", "日"]
     missing_str = "、 ".join([f"{d.month}/{d.day}({weekdays_ja[d.weekday()]})" for d in missing_dates])
-    missing_warning_html = f"<div style='background-color: #FEF2F2; border-left: 5px solid #DC2626; padding: 12px 15px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);'><p style='color:#DC2626; font-weight:bold; margin:0; font-size: 1.05rem;'>⚠️ 今月の未入力日（日曜以外）: {missing_str}</p></div>"
+    missing_warning_html = f"<div style='background-color: #FEF2F2; border-left: 5px solid #DC2626; padding: 12px 15px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);'><p style='color:#DC2626; font-weight:bold; margin:0; font-size: 1.05rem;'>⚠️ 今月の未入力日: {missing_str}</p></div>"
 
 
 if menu == "一括入力":
@@ -613,4 +613,418 @@ elif menu == "ランキング":
     if not df.empty:
         jst_today = pd.Timestamp(jst_now.date())
         first_day_of_this_month = jst_today.replace(day=1)
-        last_day_of_last_month = first_day_
+        last_day_of_last_month = first_day_of_this_month - pd.Timedelta(days=1)
+        last_month_num = last_day_of_last_month.month
+
+        tab1, tab2, tab3, tab4 = st.tabs(["今月の集計", f"{last_month_num}月の集計", "直近3ヶ月", "累計"])
+        def get_agg(target_df):
+            if target_df.empty: return pd.DataFrame()
+            return target_df.groupby(['名前', '学年'])['利用時間（時間）'].sum().reset_index().sort_values(by='利用時間（時間）', ascending=False).reset_index(drop=True)
+
+        df_vp = df[df['日付'] <= jst_today]
+        
+        # 今月のデータ
+        df_this_month = df_vp[(df_vp['日付'].dt.year == jst_today.year) & (df_vp['日付'].dt.month == jst_today.month)]
+        
+        # 前月のデータ
+        first_day_of_last_month = last_day_of_last_month.replace(day=1)
+        df_last_month = df_vp[(df_vp['日付'] >= first_day_of_last_month) & (df_vp['日付'] <= last_day_of_last_month)]
+        
+        # 直近3ヶ月のデータ
+        df_3months = df_vp[df_vp['日付'] >= (jst_today - pd.DateOffset(months=3))]
+        
+        for tab, agg_data, period_name in zip([tab1, tab2, tab3, tab4], 
+                                              [get_agg(df_this_month), get_agg(df_last_month), get_agg(df_3months), get_agg(df_vp)],
+                                              ["今月", f"{last_month_num}月", "直近3ヶ月", "累計"]):
+            with tab:
+                if agg_data.empty: st.info("データがありません。")
+                else:
+                    render_section_ranking(agg_data, [f"小{i}" for i in range(1, 7)], "小学生の部")
+                    render_section_ranking(agg_data, [f"中{i}" for i in range(1, 4)], "中学生の部")
+                    render_section_ranking(agg_data, ["高1", "高2"], "高1・高2の部")
+                    render_section_ranking(agg_data, ["高3", "既卒/その他", ""], "高3・その他の部")
+                    
+                    st.markdown("---")
+                    st.markdown("##### 📋 PowerPoint貼り付け用データ (上位5名)")
+                    
+                    copy_text = f"期間：{period_name}度\n\n"
+                    
+                    sections = [
+                        ("【 小学生の部 】", [f"小{i}" for i in range(1, 7)]),
+                        ("【 中学生の部 】", [f"中{i}" for i in range(1, 4)]),
+                        ("【 高1・高2の部 】", ["高1", "高2"]),
+                        ("【 高3・その他の部 】", ["高3", "既卒/その他", ""])
+                    ]
+                    
+                    for sec_name, grades in sections:
+                        sec_df = agg_data[agg_data['学年'].isin(grades)].reset_index(drop=True)
+                        if not sec_df.empty:
+                            sec_df['順位'] = sec_df['利用時間（時間）'].rank(method='min', ascending=False).astype(int)
+                            top5 = sec_df[sec_df['順位'] <= 5].sort_values('順位')
+                            copy_text += f"{sec_name}\n順位\t名前\t学年\t時間\n"
+                            for _, row in top5.iterrows():
+                                copy_text += f"{row['順位']}位\t{row['名前']}さん\t{row['学年']}\t{row['利用時間（時間）']:.1f}h\n"
+                        copy_text += "\n"
+                        
+                    st.code(copy_text, language="text")
+
+    else: st.info("データがありません。最初の記録を登録してください。")
+
+elif menu == "分析":
+    st.markdown("<div class='main-title'>ANALYTICS DASHBOARD</div>", unsafe_allow_html=True)
+    df_ana = load_data()
+    jst_today = pd.Timestamp(jst_now.date())
+
+    st.markdown("<div class='section-title'>パフォーマンスサマリー（前月比）</div>", unsafe_allow_html=True)
+    if not df_ana.empty:
+        this_month_start = jst_today.replace(day=1)
+        last_month_start = (this_month_start - pd.Timedelta(days=1)).replace(day=1)
+        
+        df_this = df_ana[df_ana['日付'] >= this_month_start]
+        df_last = df_ana[(df_ana['日付'] >= last_month_start) & (df_ana['日付'] < this_month_start)]
+        
+        hours_this = df_this['利用時間（時間）'].sum()
+        hours_last = df_last['利用時間（時間）'].sum()
+        diff_hours = hours_this - hours_last
+        pct_hours = (diff_hours / hours_last * 100) if hours_last > 0 else (100 if hours_this > 0 else 0)
+        
+        users_this = df_this['名前'].nunique()
+        users_last = df_last['名前'].nunique()
+        diff_users = users_this - users_last
+        pct_users = (diff_users / users_last * 100) if users_last > 0 else (100 if users_this > 0 else 0)
+        
+        col_met1, col_met2, col_met3 = st.columns(3)
+        col_met1.metric("今月の総学習時間", f"{hours_this:.1f} 時間", f"{pct_hours:+.1f}% ({diff_hours:+.1f} 時間)")
+        col_met2.metric("今月の利用者数", f"{users_this} 名", f"{pct_users:+.1f}% ({diff_users:+d} 名)")
+        if users_this > 0:
+            avg_this = hours_this / users_this
+            avg_last = hours_last / users_last if users_last > 0 else 0
+            diff_avg = avg_this - avg_last
+            pct_avg = (diff_avg / avg_last * 100) if avg_last > 0 else (100 if avg_this > 0 else 0)
+            col_met3.metric("1人あたり平均学習時間", f"{avg_this:.1f} 時間", f"{pct_avg:+.1f}% ({diff_avg:+.1f} 時間)")
+            
+        # --- 翌月の利用予測 ---
+        today_d = jst_today.day
+        next_month_first = (jst_today.replace(day=1) + timedelta(days=32)).replace(day=1)
+        days_in_month = (next_month_first - timedelta(days=1)).day
+        
+        proj_hours_this_month = hours_this / today_d * days_in_month if today_d > 0 else 0
+        
+        growth_rate_h = pct_hours / 100.0 if pct_hours != 100 else 0
+        next_month_h = proj_hours_this_month * (1 + max(min(growth_rate_h, 0.15), -0.15))
+        next_month_u = users_this * (1 + max(min((pct_users / 100.0), 0.1), -0.1))
+        
+        st.markdown(f"""
+        <div style='background-color: #FFFFFF; border-left: 6px solid #F59E0B; padding: 20px; border-radius: 12px; margin-top: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.05);'>
+            <div style='font-weight: 900; color: #0F172A; margin-bottom: 8px; font-size: 1.2rem;'>翌月の着地予測</div>
+            <div style='color: #475569; font-size: 1.05rem;'>
+                現在のペースと成長トレンドを考慮すると、来月は <b style='color: #B45309; font-size: 1.3rem;'>約 {next_month_h:.0f} 時間</b> の利用と、<b style='color: #B45309; font-size: 1.3rem;'>約 {int(next_month_u)} 名</b> の生徒の来室が見込まれます。
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+    else:
+        st.info("データが蓄積されると前月比の利用率が表示されます。")
+        
+    st.markdown("<hr style='margin: 30px 0;'>", unsafe_allow_html=True)
+
+    tab1, tab2, tab3 = st.tabs(["混雑状況", "生徒個別", "来週の予測"])
+
+    def get_active_slots(in_str, out_str, slots_list):
+        def parse_time(t_str):
+            t_str = str(t_str).strip()
+            if "コマ" in t_str:
+                try:
+                    koma = int(t_str.replace("コマ", ""))
+                    hour = 13 + int((koma - 1) * 1.5)
+                    return datetime.strptime(f"{hour:02d}:00", "%H:%M").time()
+                except: return None
+            try:
+                parts = t_str.split(":")
+                if len(parts) >= 2:
+                    return datetime.strptime(f"{int(parts[0]):02d}:{int(parts[1]):02d}", "%H:%M").time()
+            except: pass
+            return None
+
+        in_t = parse_time(in_str)
+        out_t = parse_time(out_str)
+        if not in_t or not out_t: return []
+        
+        slots = []
+        for slot_str in slots_list:
+            h = int(slot_str[:2])
+            slot_start = datetime.strptime(f"{h:02d}:00", "%H:%M").time()
+            slot_end = datetime.strptime(f"{h+1:02d}:00", "%H:%M").time() if h < 22 else datetime.strptime("23:59", "%H:%M").time()
+            if in_t < slot_end and out_t > slot_start:
+                slots.append(slot_str)
+        return slots
+
+    with tab1:
+        st.markdown("<div class='section-title'>曜日・時間帯別の混雑状況</div>", unsafe_allow_html=True)
+        if not df_ana.empty:
+            df_ana['年月'] = pd.to_datetime(df_ana['日付']).dt.strftime('%Y年%m月')
+            month_options = ["累計"] + sorted(df_ana['年月'].dropna().unique().tolist(), reverse=True)
+            selected_period = st.selectbox("集計対象を選択", month_options)
+
+            target_df = df_ana if selected_period == "累計" else df_ana[df_ana['年月'] == selected_period]
+            
+            current_time_slots = get_time_slots_for_period(selected_period)
+            weekdays = ["月", "火", "水", "木", "金", "土", "日"]
+            heatmap_data = pd.DataFrame(0, index=weekdays, columns=current_time_slots)
+
+            for _, row in target_df.iterrows():
+                if pd.isnull(row['日付']) or not row['入室時間'] or not row['退室時間']: continue
+                try:
+                    wd = weekdays[pd.to_datetime(row['日付']).weekday()]
+                    for slot in get_active_slots(row['入室時間'], row['退室時間'], current_time_slots):
+                        heatmap_data.loc[wd, slot] += 1
+                except: continue
+
+            max_val = heatmap_data.values.max()
+            max_val = max(max_val, 1)
+
+            html = "<div style='overflow-x: auto; background: white; padding: 15px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); border: 1px solid #E2E8F0;'><table style='width:100%; border-collapse: collapse; min-width: 600px;'>"
+            html += "<tr><th style='border: 1px solid #CBD5E1; padding: 10px; background-color: #F8FAFC; color: #0F172A; position: sticky; left: 0; z-index: 1;'>曜日</th>"
+            for tb in current_time_slots: html += f"<th style='border: 1px solid #CBD5E1; padding: 10px; background-color: #F8FAFC; color: #0F172A; font-size:0.85rem;'>{tb[:2]}時台</th>"
+            html += "</tr>"
+
+            for wd in weekdays:
+                html += f"<tr><th style='border: 1px solid #CBD5E1; padding: 10px; background-color: #F8FAFC; color: #0F172A; position: sticky; left: 0; z-index: 1;'>{wd}</th>"
+                for tb in current_time_slots:
+                    val = heatmap_data.loc[wd, tb]
+                    ratio = val / max_val if max_val > 0 else 0
+                    bg_color = f"rgba(37, 99, 235, {ratio * 0.8})" if val > 0 else "transparent"
+                    font_color = "white" if ratio > 0.5 else "#1E293B"
+                    html += f"<td style='border: 1px solid #CBD5E1; padding: 10px; text-align: center; font-weight: bold; background-color: {bg_color}; color: {font_color};'>{val}</td>"
+                html += "</tr>"
+            html += "</table></div>"
+            st.markdown(html, unsafe_allow_html=True)
+        else:
+            st.info("集計するデータがありません。")
+
+    with tab2:
+        st.markdown("<div class='section-title'>生徒個別 学習時間データ</div>", unsafe_allow_html=True)
+        if not df_ana.empty:
+            unique_names = df_ana['名前'].dropna().unique().tolist()
+            unique_names = [n for n in unique_names if str(n).strip() != ""]
+
+            if unique_names:
+                selected_name = st.selectbox("生徒名で検索", ["-- 選択してください --"] + unique_names)
+                if selected_name != "-- 選択してください --":
+                    student_df = df_ana[df_ana['名前'] == selected_name].copy()
+                    student_df['日付'] = pd.to_datetime(student_df['日付'])
+
+                    this_month = jst_today.replace(day=1)
+                    sm_df = student_df[student_df['日付'] >= this_month]
+                    total_h = sm_df['利用時間（時間）'].sum()
+
+                    st.markdown(f"<div style='background: linear-gradient(135deg, #1E293B 0%, #0F172A 100%); padding: 25px; border-radius: 12px; color: white; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);'><h4 style='margin:0; font-size: 1.1rem; color: #94A3B8; font-weight: bold;'>{selected_name} さんの今月の学習時間</h4><div style='font-size: 3rem; font-weight: 900; margin-top: 5px; color: #FFFFFF;'>{total_h:.1f} <span style='font-size: 1.2rem; font-weight: bold; color: #94A3B8;'>時間</span></div></div>", unsafe_allow_html=True)
+
+                    st.markdown("##### 日別の学習推移（今月）")
+                    if not sm_df.empty:
+                        daily_sum = sm_df.groupby('日付')['利用時間（時間）'].sum().reset_index()
+                        daily_sum['日付ラベル'] = daily_sum['日付'].dt.strftime('%m/%d')
+                        chart_data = daily_sum.set_index('日付ラベル')['利用時間（時間）']
+                        st.bar_chart(chart_data)
+                    else: st.info("今月の記録はまだありません。")
+
+                    st.markdown("##### 直近の記録一覧")
+                    display_history = student_df.sort_values('日付', ascending=False).head(10)
+                    display_history['日付'] = display_history['日付'].dt.strftime('%Y/%m/%d')
+                    st.dataframe(display_history[['日付', '入室時間', '退室時間', '利用時間（時間）']], use_container_width=True, hide_index=True)
+            else: st.info("検索できる生徒データがありません。")
+        else: st.info("集計するデータがありません。")
+
+    with tab3:
+        st.markdown("<div class='section-title'>来週の混雑予測（推計）</div>", unsafe_allow_html=True)
+        st.markdown("<p style='color:#64748B; font-size:1rem; font-weight: bold;'>直近4週間（過去28日間）の実際の利用データを解析し、来週の各時間帯に平均して何人の生徒が来るかを推計しています。</p>", unsafe_allow_html=True)
+        
+        if not df_ana.empty:
+            # 過去のデータから乗数を学習
+            test_mult, before_mult = learn_multipliers(df_ana)
+            
+            four_weeks_ago = jst_today - pd.Timedelta(days=28)
+            df_recent = df_ana[pd.to_datetime(df_ana['日付']) >= four_weeks_ago]
+            
+            # 来週の日付を特定し、テスト前やテスト期間が含まれるかチェック
+            target_dates = [jst_today + timedelta(days=i) for i in range(1, 8)]
+            has_test = any(get_period_status(dt) == "test" for dt in target_dates)
+            has_before = any(get_period_status(dt) == "before_test" for dt in target_dates)
+            
+            if has_test or has_before:
+                msg_parts = []
+                if has_test: msg_parts.append("「テスト期間」")
+                if has_before: msg_parts.append("「テスト1週間前」")
+                status_str = " または ".join(msg_parts)
+                st.markdown(f"<div style='background-color: #FEF2F2; border-left: 5px solid #DC2626; padding: 15px; margin-bottom: 20px; border-radius: 8px;'><p style='color:#DC2626; font-weight:bold; margin:0;'>来週は{status_str}に該当する日があるため、通常より混雑が予想されます。座席数を超える時間帯にご注意ください。</p></div>", unsafe_allow_html=True)
+
+            if not df_recent.empty:
+                pred_period_str = (jst_today + pd.Timedelta(days=7)).strftime('%Y年%m月')
+                pred_time_slots = get_time_slots_for_period(pred_period_str)
+                weekdays = ["月", "火", "水", "木", "金", "土", "日"]
+                
+                # 平準化用のベースライン計算
+                predict_data = pd.DataFrame(0.0, index=weekdays, columns=pred_time_slots)
+
+                for _, row in df_recent.iterrows():
+                    if pd.isnull(row['日付']) or not row['入室時間'] or not row['退室時間']: continue
+                    try:
+                        dt = pd.to_datetime(row['日付'])
+                        wd = weekdays[dt.weekday()]
+                        status = get_period_status(dt)
+                        
+                        # 過去データが既にテスト前・テスト中だった場合、割引いて「通常時」の水準に戻す
+                        div_factor = 1.0
+                        if status == "test": div_factor = test_mult
+                        elif status == "before_test": div_factor = before_mult
+                        
+                        for slot in get_active_slots(row['入室時間'], row['退室時間'], pred_time_slots):
+                            predict_data.loc[wd, slot] += (0.25 / div_factor)
+                    except: continue
+
+                # 来週の該当曜日ごとに、適切な乗数を掛ける
+                for dt in target_dates:
+                    wd = weekdays[dt.weekday()]
+                    status = get_period_status(dt)
+                    mult = 1.0
+                    if status == "test": mult = test_mult
+                    elif status == "before_test": mult = before_mult
+                    predict_data.loc[wd] = predict_data.loc[wd] * mult
+
+                html = "<div style='overflow-x: auto; background: white; padding: 15px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); border: 1px solid #E2E8F0;'><table style='width:100%; border-collapse: collapse; min-width: 600px;'>"
+                html += "<tr><th style='border: 1px solid #CBD5E1; padding: 10px; background-color: #F8FAFC; color: #0F172A; position: sticky; left: 0; z-index: 1;'>曜日</th>"
+                for tb in pred_time_slots: html += f"<th style='border: 1px solid #CBD5E1; padding: 10px; background-color: #F8FAFC; color: #0F172A; font-size:0.85rem;'>{tb[:2]}時台</th>"
+                html += "</tr>"
+
+                for wd in weekdays:
+                    html += f"<tr><th style='border: 1px solid #CBD5E1; padding: 10px; background-color: #F8FAFC; color: #0F172A; position: sticky; left: 0; z-index: 1;'>{wd}</th>"
+                    for tb in pred_time_slots:
+                        val = predict_data.loc[wd, tb]
+                        
+                        ratio = val / 20.0
+                        if ratio > 1.0: ratio = 1.0
+                        
+                        rounded_val = int(round(val))
+                        
+                        if rounded_val >= 20:
+                            bg_color = "rgba(220, 38, 38, 0.9)"
+                            font_color = "white"
+                            display_val = "満席"
+                        elif rounded_val >= 15:
+                            bg_color = f"rgba(234, 88, 12, {max(0.6, ratio)})"
+                            font_color = "white"
+                            display_val = f"約{rounded_val}人"
+                        elif rounded_val > 0:
+                            bg_color = f"rgba(37, 99, 235, {ratio * 0.8})"
+                            font_color = "white" if ratio > 0.4 else "#1E293B"
+                            display_val = f"約{rounded_val}人"
+                        else:
+                            bg_color = "transparent"
+                            font_color = "#1E293B"
+                            display_val = "-"
+                            
+                        html += f"<td style='border: 1px solid #CBD5E1; padding: 10px; text-align: center; font-size:0.85rem; font-weight: bold; background-color: {bg_color}; color: {font_color};'>{display_val}</td>"
+                    html += "</tr>"
+                html += "</table></div>"
+                st.markdown(html, unsafe_allow_html=True)
+            else:
+                st.info("直近4週間のデータがないため、予測を計算できません。")
+        else:
+            st.info("集計するデータがありません。")
+
+elif menu == "管理":
+    st.markdown("<div class='main-title'>ADMIN PANEL</div>", unsafe_allow_html=True)
+    df_manage = load_data()
+    
+    if not df_manage.empty:
+        tab_edit, tab_del = st.tabs(["1件ずつ編集", "複数の一括削除"])
+        
+        options = []
+        for i in reversed(df_manage.index):
+            row = df_manage.loc[i]
+            d_str = row['日付'].strftime('%m/%d') if pd.notnull(row['日付']) else "不明"
+            options.append((str(i), f"{d_str} | {row['名前']} ({row['入室時間']} - {row['退室時間']})"))
+            
+        with tab_del:
+            st.markdown("##### まとめて削除")
+            selected_dels = st.multiselect("削除する記録を選択してください", options, format_func=lambda x: x[1])
+            
+            if st.button("選択した記録を完全に削除", type="primary"):
+                if selected_dels:
+                    indices_to_drop = [int(x[0]) for x in selected_dels]
+                    df_manage = df_manage.drop(indices_to_drop).reset_index(drop=True)
+                    save_to_gs(df_manage)
+                    st.session_state.sys_msg = f"{len(indices_to_drop)}件の記録を削除しました。"
+                    st.cache_data.clear()
+                    st.rerun()
+                else:
+                    st.warning("削除する記録が選択されていません。")
+
+        with tab_edit:
+            st.markdown("##### 記録の編集")
+            selected_mng = st.selectbox("編集する記録", [("-1", "-- 選択してください --")] + options[:50], format_func=lambda x: x[1])
+            
+            if selected_mng[0] != "-1":
+                target_idx = int(selected_mng[0])
+                target_row = df_manage.loc[target_idx]
+                st.markdown("<div style='margin-top: 10px; padding: 25px; border-radius: 12px; background-color: #FFFFFF; border: 1px solid #E2E8F0; box-shadow: 0 4px 6px rgba(0,0,0,0.05);'>", unsafe_allow_html=True)
+                
+                default_date = target_row['日付'].date() if pd.notnull(target_row['日付']) else jst_now.date()
+                edit_date = st.date_input("利用日", default_date)
+                
+                edit_name = st.text_input("氏名 (必須)", value=str(target_row['名前']), placeholder="例: 山田太郎")
+                
+                edit_in_key = f"edit_in_{target_idx}_{target_row['名前']}"
+                edit_out_key = f"edit_out_{target_idx}_{target_row['名前']}"
+                
+                if edit_in_key not in st.session_state:
+                    st.session_state[edit_in_key] = str(target_row['入室時間'])
+                if edit_out_key not in st.session_state:
+                    st.session_state[edit_out_key] = str(target_row['退室時間'])
+
+                col_in, col_out = st.columns(2)
+                with col_in: edit_in_str = st.text_input("開始時間 (例: 1223, 全角OK)", key=edit_in_key, on_change=format_time_input, args=(edit_in_key,), placeholder="例: 1223")
+                with col_out: edit_out_str = st.text_input("終了時間 (例: 1530, 全角OK)", key=edit_out_key, on_change=format_time_input, args=(edit_out_key,), placeholder="例: 1530")
+
+                current_grade = str(target_row['学年'])
+                if not current_grade: current_grade = "--選択--"
+                g_index = GRADES.index(current_grade) if current_grade in GRADES else 0
+                edit_grade = st.selectbox("学年 (必須)", GRADES, index=g_index)
+                
+                st.markdown("<br>", unsafe_allow_html=True)
+                col_btn1, col_btn2 = st.columns(2)
+                with col_btn1:
+                    if st.button("この内容で上書き保存", use_container_width=True, type="primary"):
+                        edit_name_clean = edit_name.replace(" ", "").replace("　", "")
+                        grade_to_save = edit_grade
+                        
+                        edit_in = parse_custom_time(edit_in_str)
+                        edit_out = parse_custom_time(edit_out_str)
+                        
+                        if edit_name_clean:
+                            if grade_to_save == "--選択--": st.error("学年を選択してください。")
+                            elif edit_in is None or edit_out is None: st.error("開始と終了時間を正しく入力してください。")
+                            elif not is_special_period(edit_date) and edit_in.hour < 12: st.error("通常期間は12時以降を入力してください。")
+                            else:
+                                duration = calc_duration(edit_in, edit_out)
+                                if duration <= 0: st.error("終了時間は開始時間以降に設定してください")
+                                else:
+                                    df_manage.at[target_idx, '日付'] = pd.to_datetime(edit_date)
+                                    df_manage.at[target_idx, '名前'] = edit_name_clean
+                                    df_manage.at[target_idx, '学年'] = grade_to_save
+                                    df_manage.at[target_idx, '入室時間'] = edit_in.strftime("%H:%M")
+                                    df_manage.at[target_idx, '退室時間'] = edit_out.strftime("%H:%M")
+                                    df_manage.at[target_idx, '利用時間（時間）'] = duration
+                                    save_to_gs(df_manage)
+                                    st.session_state.sys_msg = "記録を更新しました。"
+                                    st.cache_data.clear()
+                                    st.rerun()
+                        else: st.error("氏名を入力してください。")
+                with col_btn2:
+                    if st.button("この記録を完全に削除", use_container_width=True):
+                        df_manage = df_manage.drop(target_idx).reset_index(drop=True)
+                        save_to_gs(df_manage)
+                        st.session_state.sys_msg = "削除しました。"
+                        st.cache_data.clear()
+                        st.rerun()
+                st.markdown("</div>", unsafe_allow_html=True)
+    else: st.info("変更・削除できるデータがありません。")
