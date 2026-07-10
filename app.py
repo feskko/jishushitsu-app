@@ -675,13 +675,14 @@ elif menu == "分析":
     df_ana = load_data()
     jst_today = pd.Timestamp(jst_now.date())
 
-    st.markdown("<div class='section-title'>パフォーマンスサマリー（前月比）</div>", unsafe_allow_html=True)
+    st.markdown("<div class='section-title'>パフォーマンスサマリー（前月同日時点との比較）</div>", unsafe_allow_html=True)
     if not df_ana.empty:
         this_month_start = jst_today.replace(day=1)
-        last_month_start = (this_month_start - pd.Timedelta(days=1)).replace(day=1)
+        last_month_start = this_month_start - pd.DateOffset(months=1)
+        last_month_today = jst_today - pd.DateOffset(months=1)
         
-        df_this = df_ana[df_ana['日付'] >= this_month_start]
-        df_last = df_ana[(df_ana['日付'] >= last_month_start) & (df_ana['日付'] < this_month_start)]
+        df_this = df_ana[(df_ana['日付'] >= this_month_start) & (df_ana['日付'] <= jst_today)]
+        df_last = df_ana[(df_ana['日付'] >= last_month_start) & (df_ana['日付'] <= last_month_today)]
         
         hours_this = df_this['利用時間（時間）'].sum()
         hours_last = df_last['利用時間（時間）'].sum()
