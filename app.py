@@ -1027,30 +1027,4 @@ elif menu == "管理":
                         st.cache_data.clear()
                         st.rerun()
                 st.markdown("</div>", unsafe_allow_html=True)
-    else: st.info("変更・削除できるデータがありません。")これに組み込んで            col_met3.metric("1人あたり平均学習時間", f"{avg_this:.1f} 時間", f"{pct_avg:+.1f}% ({diff_avg:+.1f} 時間)")
-            
-        # --- 翌月の利用予測 ---
-        today_d = jst_today.day
-        next_month_first = (this_month_start + pd.DateOffset(months=1))
-        days_in_month = (next_month_first - pd.Timedelta(days=1)).day
-        
-        proj_hours_this_month = hours_this / today_d * days_in_month if today_d > 0 else 0
-        
-        growth_rate_h = pct_hours / 100.0 if pct_hours != 100 else 0
-        next_month_h = proj_hours_this_month * (1 + max(min(growth_rate_h, 0.15), -0.15))
-        next_month_u = users_this * (1 + max(min((pct_users / 100.0), 0.1), -0.1))
-        
-        st.markdown(f"""
-        <div style='background-color: #FFFFFF; border-left: 6px solid #F59E0B; padding: 20px; border-radius: 12px; margin-top: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.05);'>
-            <div style='font-weight: 900; color: #0F172A; margin-bottom: 8px; font-size: 1.2rem;'>着地予測</div>
-            <div style='color: #475569; font-size: 1.05rem;'>
-                現在のペースを考慮すると、今月末には <b style='color: #B45309; font-size: 1.3rem;'>約 {proj_hours_this_month:.0f} 時間</b> の利用に到達する見込みです。<br>来月は <b style='color: #B45309; font-size: 1.3rem;'>約 {next_month_h:.0f} 時間</b> の利用と、<b style='color: #B45309; font-size: 1.3rem;'>約 {int(next_month_u)} 名</b> の生徒の来室が見込まれます。
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-    else:
-        st.info("データが蓄積されると前月比の利用率が表示されます。")
-        
-    st.markdown("<hr style='margin: 30px 0;'>", unsafe_allow_html=True)
-
-    tab1, tab2, tab3 = st.tabs(["混雑状況", "生徒個別", "来週の予測"])
+    else: st.info("変更・削除できるデータがありません。")これに組み込んで
