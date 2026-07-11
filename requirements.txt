@@ -1,4 +1,6 @@
-streamlit
-pandas
+pandas<3.0.0
+numpy<2.0.0
 gspread
 google-auth
+google-oauthlib
+streamlit
