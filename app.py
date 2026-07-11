@@ -269,7 +269,6 @@ if missing_dates:
     missing_str = "、 ".join([f"{d.month}/{d.day}({weekdays_ja[d.weekday()]})" for d in missing_dates])
     missing_warning_html = f"<div style='background-color: #FEF2F2; border-left: 5px solid #DC2626; padding: 12px 15px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);'><p style='color:#DC2626; font-weight:bold; margin:0; font-size: 1.05rem;'>⚠️ 今月の未入力日: {missing_str}</p></div>"
 
-
 if menu == "一括入力":
     st.markdown("<div class='main-title'>BATCH ENTRY PANEL</div>", unsafe_allow_html=True)
     if missing_warning_html: st.markdown(missing_warning_html, unsafe_allow_html=True)
@@ -473,8 +472,10 @@ elif menu == "分析":
         this_month_start = jst_today.replace(day=1)
         last_month_start = (this_month_start - pd.Timedelta(days=1)).replace(day=1)
         last_month_end = this_month_start - pd.Timedelta(days=1)
+        
         two_months_ago_start = (last_month_start - pd.Timedelta(days=1)).replace(day=1)
         two_months_ago_end = last_month_start - pd.Timedelta(days=1)
+        
         last_month_today = jst_today - pd.DateOffset(months=1)
 
         # 1. 先月の確定実績（前々月との比較）
