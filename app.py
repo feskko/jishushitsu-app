@@ -1,16 +1,15 @@
 import streamlit as st
 import pandas as pd
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import gspread
 from google.oauth2.service_account import Credentials
 import json
 import os
 import base64
 import unicodedata
-import streamlit.components.v1 as components
 
 # 日本時間の「今」を取得
-jst_now = datetime.utcnow() + timedelta(hours=9)
+jst_now = datetime.now(timezone.utc) + timedelta(hours=9)
 
 # 講習期間の判定
 def is_special_period(dt_date):
@@ -137,7 +136,7 @@ js_code = f"""
     function formatTimeInput(target) {{
         let val = target.value; if (!val) return;
         let halfVal = val.replace(/[０-９]/g, function(s) {{ return String.fromCharCode(s.charCodeAt(0) - 0xFEE0); }});
-        if (/^\d{{3,4}}$/.test(halfVal)) {{
+        if (/^\\d{{3,4}}$/.test(halfVal)) {{
             let h = halfVal.length === 3 ? '0' + halfVal.slice(0,1) : halfVal.slice(0,2);
             let m = halfVal.slice(-2);
             let hNum = parseInt(h, 10); let mNum = parseInt(m, 10);
@@ -153,7 +152,7 @@ js_code = f"""
     doc.addEventListener('focusout', function(e) {{ if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) {{ formatTimeInput(e.target); }} }}, true);
 </script>
 """
-components.html(js_code, height=0, width=0)
+st.markdown(js_code, unsafe_allow_html=True)
 
 st.markdown("""
 <style>
@@ -221,7 +220,7 @@ def load_data():
         df = pd.DataFrame(workbook.worksheet("メイン").get_all_records())
         if not df.empty: 
             df['日付'] = pd.to_datetime(df['日付'])
-            df['名前'] = df['名前'].astype(str).str.replace(r'[\s　]+', '', regex=True)
+            df['名前'] = df['名前'].astype(str).str.replace(r'[\s ]+', '', regex=True)
         return df
     except: return pd.DataFrame(columns=['日付', '名前', '学年', '入室時間', '退室時間', '利用時間（時間）'])
 
@@ -295,7 +294,7 @@ if menu == "一括入力":
             new_records, error_msgs = [], []
             df_current = load_data()
             for idx, row in valid_rows.iterrows():
-                name = row["氏名"].replace(" ", "").replace("　", "")
+                name = row["氏名"].replace(" ", "").replace(" ", "")
                 grade_input = row.get("学年")
                 if pd.isna(grade_input) or grade_input == "--選択--" or not grade_input:
                     error_msgs.append(f"{name}さん (学年が選択されていません)"); continue
@@ -370,7 +369,7 @@ elif menu == "1件ずつ":
 
     st.markdown("<hr style='margin-top:20px; margin-bottom:20px;'>", unsafe_allow_html=True)
     if st.button("この内容で1件記録する", use_container_width=True, type="primary"):
-        f_name_clean = f_name.replace(" ", "").replace("　", "")
+        f_name_clean = f_name.replace(" ", "").replace(" ", "")
         in_time, out_time = parse_custom_time(in_time_str), parse_custom_time(out_time_str)
         if not f_name_clean: st.error("氏名を入力してください。")
         elif f_grade == "--選択--": st.error("学年を選択してください。")
@@ -742,7 +741,7 @@ elif menu == "管理":
                 col_btn1, col_btn2 = st.columns(2)
                 with col_btn1:
                     if st.button("この内容で上書き保存", use_container_width=True, type="primary"):
-                        edit_name_clean = edit_name.replace(" ", "").replace("　", "")
+                        edit_name_clean = edit_name.replace(" ", "").replace(" ", "")
                         edit_in, edit_out = parse_custom_time(edit_in_str), parse_custom_time(edit_out_str)
                         if edit_name_clean:
                             if edit_grade == "--選択--": st.error("学年を選択してください。")
