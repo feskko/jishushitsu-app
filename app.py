@@ -272,32 +272,61 @@ if menu == "一括入力":
     st.markdown("<div class='main-title'>BATCH ENTRY PANEL</div>", unsafe_allow_html=True)
     if missing_warning_html: st.markdown(missing_warning_html, unsafe_allow_html=True)
     f_date_batch = st.date_input("利用日 (全員共通)", jst_now.date(), max_value=jst_now.date())
-    if "batch_data" not in st.session_state: st.session_state.batch_data = [{"学年": "--選択--", "氏名": "", "開始時間": "", "終了時間": ""} for _ in range(25)]
+    
+    # --- 一括入力用の過去ユーザーリスト (直近90日) ---
+    batch_user_list = ["-- 手入力 --"]
+    df_history_batch = load_data()
+    if not df_history_batch.empty:
+        limit_date_batch = pd.Timestamp(jst_now.date() - timedelta(days=90))
+        recent_df_batch = df_history_batch[df_history_batch['日付'] >= limit_date_batch]
+        batch_user_list += recent_df_batch['名前'].drop_duplicates().dropna().tolist()
+
+    if "batch_data" not in st.session_state: 
+        st.session_state.batch_data = [{"学年": "--選択--", "氏名(選択)": "-- 手入力 --", "氏名(新規)": "", "開始時間": "", "終了時間": ""} for _ in range(25)]
     df_empty = pd.DataFrame(st.session_state.batch_data)
-    st.markdown("<p style='color:#64748B; font-weight:bold; margin-bottom:10px;'>全ての項目（学年を含む）を入力してください。</p>", unsafe_allow_html=True)
+    st.markdown("<p style='color:#64748B; font-weight:bold; margin-bottom:10px;'>過去の利用者から選ぶか、新規の場合は手入力欄に記入してください（選択した場合は学年が自動補完されます）。</p>", unsafe_allow_html=True)
     
     edited_df = st.data_editor(
         df_empty,
         column_config={
-            "学年": st.column_config.SelectboxColumn("学年 (必須)", options=GRADES, width="small"),
-            "氏名": st.column_config.TextColumn("氏名 (必須)", width="medium"),
+            "学年": st.column_config.SelectboxColumn("学年", options=GRADES, width="small"),
+            "氏名(選択)": st.column_config.SelectboxColumn("氏名(過去の利用者)", options=batch_user_list, width="medium"),
+            "氏名(新規)": st.column_config.TextColumn("氏名(新規手入力)", width="medium"),
             "開始時間": st.column_config.TextColumn("開始時間 (例:1223)", width="small"),
             "終了時間": st.column_config.TextColumn("終了時間 (例:1530)", width="small"),
         },
-        column_order=["学年", "氏名", "開始時間", "終了時間"], num_rows="dynamic", use_container_width=True, height=500, key=f"editor_{st.session_state.form_key}"
+        column_order=["学年", "氏名(選択)", "氏名(新規)", "開始時間", "終了時間"], num_rows="dynamic", use_container_width=True, height=500, key=f"editor_{st.session_state.form_key}"
     )
     
     if st.button("表のデータをすべて保存する", type="primary", use_container_width=True):
-        valid_rows = edited_df[edited_df["氏名"].str.strip() != ""]
+        valid_rows = edited_df[(edited_df["氏名(選択)"] != "-- 手入力 --") | (edited_df["氏名(新規)"].str.strip() != "")]
         if valid_rows.empty: st.error("氏名が入力されている行がありません。")
         else:
             new_records, error_msgs = [], []
             df_current = load_data()
+            
+            # 学年の自動補完用データ
+            grade_lookup = {}
+            if not df_current.empty:
+                recent_grades = df_current[['名前', '学年']].drop_duplicates(subset=['名前'], keep='last')
+                grade_lookup = dict(zip(recent_grades['名前'], recent_grades['学年']))
+
             for idx, row in valid_rows.iterrows():
-                name = "".join(str(row["氏名"]).split())
+                name_sel = row.get("氏名(選択)", "-- 手入力 --")
+                name_man = str(row.get("氏名(新規)", ""))
+                raw_name = name_sel if name_sel != "-- 手入力 --" else name_man
+                name = "".join(str(raw_name).split())
+                
+                if not name: continue
+                
                 grade_input = row.get("学年")
+                # 選択済みのユーザーで学年が未選択の場合、自動で補完する
                 if pd.isna(grade_input) or grade_input == "--選択--" or not grade_input:
-                    error_msgs.append(f"{name}さん (学年が選択されていません)"); continue
+                    if name in grade_lookup and grade_lookup[name] and grade_lookup[name] != "--選択--":
+                        grade_input = grade_lookup[name]
+                    else:
+                        error_msgs.append(f"{name}さん (学年が選択されていません)"); continue
+
                 in_dt_time, out_dt_time = parse_custom_time(row["開始時間"]), parse_custom_time(row["終了時間"])
                 if in_dt_time is None or out_dt_time is None:
                     error_msgs.append(f"{name}さん (開始・終了時間を正しく入力してください)"); continue
@@ -321,7 +350,7 @@ if menu == "一括入力":
             if new_records:
                 df = pd.concat([df_current, pd.DataFrame(new_records)], ignore_index=True)
                 save_to_gs(df)
-                st.session_state.batch_data = [{"学年": "--選択--", "氏名": "", "開始時間": "", "終了時間": ""} for _ in range(25)]
+                st.session_state.batch_data = [{"学年": "--選択--", "氏名(選択)": "-- 手入力 --", "氏名(新規)": "", "開始時間": "", "終了時間": ""} for _ in range(25)]
                 st.session_state.form_key += 1
                 st.session_state.sys_msg = f"{len(new_records)}名分の記録を一括保存しました。（入力欄をリセットしました）"
                 st.cache_data.clear()
