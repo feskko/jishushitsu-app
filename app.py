@@ -220,7 +220,7 @@ def load_data():
         df = pd.DataFrame(workbook.worksheet("メイン").get_all_records())
         if not df.empty: 
             df['日付'] = pd.to_datetime(df['日付'])
-            df['名前'] = df['名前'].astype(str).str.replace(' ', '').str.replace(' ', '')
+            df['名前'] = df['名前'].astype(str).apply(lambda x: "".join(x.split()))
         return df
     except: return pd.DataFrame(columns=['日付', '名前', '学年', '入室時間', '退室時間', '利用時間（時間）'])
 
@@ -294,7 +294,7 @@ if menu == "一括入力":
             new_records, error_msgs = [], []
             df_current = load_data()
             for idx, row in valid_rows.iterrows():
-                name = row["氏名"].replace(" ", "").replace(" ", "")
+                name = "".join(str(row["氏名"]).split())
                 grade_input = row.get("学年")
                 if pd.isna(grade_input) or grade_input == "--選択--" or not grade_input:
                     error_msgs.append(f"{name}さん (学年が選択されていません)"); continue
@@ -369,7 +369,7 @@ elif menu == "1件ずつ":
 
     st.markdown("<hr style='margin-top:20px; margin-bottom:20px;'>", unsafe_allow_html=True)
     if st.button("この内容で1件記録する", use_container_width=True, type="primary"):
-        f_name_clean = f_name.replace(" ", "").replace(" ", "")
+        f_name_clean = "".join(f_name.split())
         in_time, out_time = parse_custom_time(in_time_str), parse_custom_time(out_time_str)
         if not f_name_clean: st.error("氏名を入力してください。")
         elif f_grade == "--選択--": st.error("学年を選択してください。")
@@ -741,7 +741,7 @@ elif menu == "管理":
                 col_btn1, col_btn2 = st.columns(2)
                 with col_btn1:
                     if st.button("この内容で上書き保存", use_container_width=True, type="primary"):
-                        edit_name_clean = edit_name.replace(" ", "").replace(" ", "")
+                        edit_name_clean = "".join(edit_name.split())
                         edit_in, edit_out = parse_custom_time(edit_in_str), parse_custom_time(edit_out_str)
                         if edit_name_clean:
                             if edit_grade == "--選択--": st.error("学年を選択してください。")
