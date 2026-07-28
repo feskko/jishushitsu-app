@@ -134,15 +134,11 @@ js_code = f"""
         let newLink = doc.createElement('link'); newLink.rel = 'apple-touch-icon'; newLink.href = 'data:image/png;base64,{img_b64}'; doc.head.appendChild(newLink);
     }}
     
-    // 【修正】Mac/Windows共通: Enterキーによるセル移動を完全に無効化（変換確定のみ機能させる）
     const blockEnter = function(e) {{
         if (e.key === 'Enter' || e.keyCode === 13) {{
             const t = e.target;
             if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA')) {{
-                // パスワード枠やドロップダウン(selectbox)操作時のEnterは許可
                 if (t.type === 'password' || t.getAttribute('role') === 'combobox') return;
-                
-                // Streamlit側にEnterを検知させないことで、セルが閉じる・移動するのを防ぐ
                 e.stopPropagation();
                 e.stopImmediatePropagation();
             }}
@@ -307,81 +303,100 @@ if menu == "一括入力":
     # --- 一括入力用の過去ユーザーリスト (直近90日) ---
     batch_user_list = ["-- 手入力 --"]
     df_history_batch = load_data()
+    grade_lookup = {}
     if not df_history_batch.empty:
         limit_date_batch = pd.Timestamp(jst_now.date() - timedelta(days=90))
         recent_df_batch = df_history_batch[df_history_batch['日付'] >= limit_date_batch]
         batch_user_list += recent_df_batch['名前'].drop_duplicates().dropna().tolist()
+        
+        # 学年の自動補完用データ
+        recent_grades = df_history_batch[['名前', '学年']].drop_duplicates(subset=['名前'], keep='last')
+        grade_lookup = dict(zip(recent_grades['名前'], recent_grades['学年']))
 
-    if "batch_data" not in st.session_state: 
-        st.session_state.batch_data = [{"学年": "--選択--", "氏名(過去の利用者)": "-- 手入力 --", "氏名(新規手入力)": "", "開始時間": "", "終了時間": ""} for _ in range(25)]
-    df_empty = pd.DataFrame(st.session_state.batch_data)
     st.markdown("<p style='color:#64748B; font-weight:bold; margin-bottom:10px;'>過去の利用者から選ぶか、新規の場合は手入力欄に記入してください（選択した場合は学年が自動補完されます）。</p>", unsafe_allow_html=True)
     
-    edited_df = st.data_editor(
-        df_empty,
-        column_config={
-            "学年": st.column_config.SelectboxColumn("学年", options=GRADES, width="small"),
-            "氏名(過去の利用者)": st.column_config.SelectboxColumn("氏名(過去の利用者)", options=batch_user_list, width="medium"),
-            "氏名(新規手入力)": st.column_config.TextColumn("氏名(新規手入力)", width="medium"),
-            "開始時間": st.column_config.TextColumn("開始時間 (例:1223)", width="small"),
-            "終了時間": st.column_config.TextColumn("終了時間 (例:1530)", width="small"),
-        },
-        column_order=["学年", "氏名(過去の利用者)", "氏名(新規手入力)", "開始時間", "終了時間"], num_rows="dynamic", use_container_width=True, height=500, key=f"editor_{st.session_state.form_key}"
-    )
-    
-    if st.button("表のデータをすべて保存する", type="primary", use_container_width=True):
-        valid_rows = edited_df[(edited_df["氏名(過去の利用者)"] != "-- 手入力 --") | (edited_df["氏名(新規手入力)"].str.strip() != "")]
-        if valid_rows.empty: st.error("氏名が入力されている行がありません。")
+    # ヘッダー
+    col_h1, col_h2, col_h3, col_h4, col_h5 = st.columns([1.5, 2.5, 2.5, 1.5, 1.5])
+    col_h1.markdown("<span style='color:#0A2B56; font-weight:bold; font-size:0.9rem;'>学年</span>", unsafe_allow_html=True)
+    col_h2.markdown("<span style='color:#0A2B56; font-weight:bold; font-size:0.9rem;'>氏名(過去の利用者)</span>", unsafe_allow_html=True)
+    col_h3.markdown("<span style='color:#0A2B56; font-weight:bold; font-size:0.9rem;'>氏名(新規手入力)</span>", unsafe_allow_html=True)
+    col_h4.markdown("<span style='color:#0A2B56; font-weight:bold; font-size:0.9rem;'>開始時間</span>", unsafe_allow_html=True)
+    col_h5.markdown("<span style='color:#0A2B56; font-weight:bold; font-size:0.9rem;'>終了時間</span>", unsafe_allow_html=True)
+
+    batch_data_inputs = []
+    for i in range(10): # 10行分の入力枠
+        c1, c2, c3, c4, c5 = st.columns([1.5, 2.5, 2.5, 1.5, 1.5])
+        with c1:
+            grade_val = st.selectbox("学年", GRADES, key=f"b_grade_{i}_{st.session_state.form_key}", label_visibility="collapsed")
+        with c2:
+            old_name_val = st.selectbox("過去氏名", batch_user_list, key=f"b_old_{i}_{st.session_state.form_key}", label_visibility="collapsed")
+        with c3:
+            new_name_val = st.text_input("新規氏名", key=f"b_new_{i}_{st.session_state.form_key}", label_visibility="collapsed", placeholder="山田太郎")
+        
+        in_k = f"b_in_{i}_{st.session_state.form_key}"
+        out_k = f"b_out_{i}_{st.session_state.form_key}"
+        with c4:
+            in_time_val = st.text_input("開始", key=in_k, label_visibility="collapsed", placeholder="1223", on_change=format_time_input, args=(in_k,))
+        with c5:
+            out_time_val = st.text_input("終了", key=out_k, label_visibility="collapsed", placeholder="1530", on_change=format_time_input, args=(out_k,))
+        
+        batch_data_inputs.append({
+            "学年": grade_val,
+            "氏名(過去)": old_name_val,
+            "氏名(新規)": new_name_val,
+            "開始": in_time_val,
+            "終了": out_time_val
+        })
+
+    st.markdown("<br>", unsafe_allow_html=True)
+    if st.button("この10件のデータを保存する", type="primary", use_container_width=True):
+        new_records, error_msgs = [], []
+        df_current = load_data()
+        has_input = False
+
+        for row in batch_data_inputs:
+            name_sel = row["氏名(過去)"]
+            name_man = str(row["氏名(新規)"])
+            raw_name = name_sel if name_sel != "-- 手入力 --" else name_man
+            name = "".join(str(raw_name).split())
+            
+            if not name: continue
+            has_input = True
+            
+            grade_input = row["学年"]
+            # 選択済みのユーザーで学年が未選択の場合、自動で補完する
+            if pd.isna(grade_input) or grade_input == "--選択--" or not grade_input:
+                if name in grade_lookup and grade_lookup[name] and grade_lookup[name] != "--選択--":
+                    grade_input = grade_lookup[name]
+                else:
+                    error_msgs.append(f"{name}さん (学年が選択されていません)"); continue
+
+            in_dt_time, out_dt_time = parse_custom_time(row["開始"]), parse_custom_time(row["終了"])
+            if in_dt_time is None or out_dt_time is None:
+                error_msgs.append(f"{name}さん (開始・終了時間を正しく入力してください)"); continue
+            if not is_special_period(f_date_batch) and in_dt_time.hour < 12:
+                error_msgs.append(f"{name}さん (通常期間は12時以降を入力してください)"); continue
+            duration = calc_duration(in_dt_time, out_dt_time)
+            if duration <= 0:
+                error_msgs.append(f"{name}さん (終了時間が開始時間より前になっています)"); continue
+            in_str, out_str = in_dt_time.strftime("%H:%M"), out_dt_time.strftime("%H:%M")
+            
+            is_dup_current = not df_current[(df_current['日付'] == pd.to_datetime(f_date_batch)) & (df_current['名前'] == name) & (df_current['入室時間'] == in_str) & (df_current['退室時間'] == out_str)].empty
+            is_dup_new = any(r['名前'] == name and r['入室時間'] == in_str and r['退室時間'] == out_str for r in new_records)
+            
+            if is_dup_current or is_dup_new:
+                error_msgs.append(f"{name}さん (既に同じ記録が登録されています)"); continue
+                
+            new_records.append({'日付': pd.to_datetime(f_date_batch), '名前': name, '学年': grade_input, '入室時間': in_str, '退室時間': out_str, '利用時間（時間）': duration})
+        
+        if not has_input:
+            st.error("氏名が入力されている行がありません。")
         else:
-            new_records, error_msgs = [], []
-            df_current = load_data()
-            
-            # 学年の自動補完用データ
-            grade_lookup = {}
-            if not df_current.empty:
-                recent_grades = df_current[['名前', '学年']].drop_duplicates(subset=['名前'], keep='last')
-                grade_lookup = dict(zip(recent_grades['名前'], recent_grades['学年']))
-
-            for idx, row in valid_rows.iterrows():
-                name_sel = row.get("氏名(過去の利用者)", "-- 手入力 --")
-                name_man = str(row.get("氏名(新規手入力)", ""))
-                raw_name = name_sel if name_sel != "-- 手入力 --" else name_man
-                name = "".join(str(raw_name).split())
-                
-                if not name: continue
-                
-                grade_input = row.get("学年")
-                # 選択済みのユーザーで学年が未選択の場合、自動で補完する
-                if pd.isna(grade_input) or grade_input == "--選択--" or not grade_input:
-                    if name in grade_lookup and grade_lookup[name] and grade_lookup[name] != "--選択--":
-                        grade_input = grade_lookup[name]
-                    else:
-                        error_msgs.append(f"{name}さん (学年が選択されていません)"); continue
-
-                in_dt_time, out_dt_time = parse_custom_time(row["開始時間"]), parse_custom_time(row["終了時間"])
-                if in_dt_time is None or out_dt_time is None:
-                    error_msgs.append(f"{name}さん (開始・終了時間を正しく入力してください)"); continue
-                if not is_special_period(f_date_batch) and in_dt_time.hour < 12:
-                    error_msgs.append(f"{name}さん (通常期間は12時以降を入力してください)"); continue
-                duration = calc_duration(in_dt_time, out_dt_time)
-                if duration <= 0:
-                    error_msgs.append(f"{name}さん (終了時間が開始時間より前になっています)"); continue
-                in_str, out_str = in_dt_time.strftime("%H:%M"), out_dt_time.strftime("%H:%M")
-                
-                is_dup_current = not df_current[(df_current['日付'] == pd.to_datetime(f_date_batch)) & (df_current['名前'] == name) & (df_current['入室時間'] == in_str) & (df_current['退室時間'] == out_str)].empty
-                is_dup_new = any(r['名前'] == name and r['入室時間'] == in_str and r['退室時間'] == out_str for r in new_records)
-                
-                if is_dup_current or is_dup_new:
-                    error_msgs.append(f"{name}さん (既に同じ記録が登録されています)"); continue
-                    
-                new_records.append({'日付': pd.to_datetime(f_date_batch), '名前': name, '学年': grade_input, '入室時間': in_str, '退室時間': out_str, '利用時間（時間）': duration})
-            
             if error_msgs:
                 for err in error_msgs: st.error(f"エラー: {err}")
             if new_records:
                 df = pd.concat([df_current, pd.DataFrame(new_records)], ignore_index=True)
                 save_to_gs(df)
-                st.session_state.batch_data = [{"学年": "--選択--", "氏名(過去の利用者)": "-- 手入力 --", "氏名(新規手入力)": "", "開始時間": "", "終了時間": ""} for _ in range(25)]
                 st.session_state.form_key += 1
                 st.session_state.sys_msg = f"{len(new_records)}名分の記録を一括保存しました。（入力欄をリセットしました）"
                 st.cache_data.clear()
