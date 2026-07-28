@@ -335,7 +335,9 @@ elif menu == "1件ずつ":
     user_list = ["-- 新規入力 (直接入力してください) --"]
     recent_users = pd.DataFrame()
     if not df_history.empty:
-        recent_users = df_history[['名前', '学年']].drop_duplicates(subset=['名前']).dropna()
+        limit_date = pd.Timestamp(jst_now.date() - timedelta(days=90))
+        recent_df = df_history[df_history['日付'] >= limit_date]
+        recent_users = recent_df[['名前', '学年']].drop_duplicates(subset=['名前']).dropna()
         user_list += recent_users['名前'].tolist()
 
     st.markdown("<p style='color:#3B82F6; font-weight:bold; margin-bottom:5px; font-size: 1.05rem;'>過去の利用者から選ぶと自動入力されます</p>", unsafe_allow_html=True)
