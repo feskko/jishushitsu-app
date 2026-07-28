@@ -134,19 +134,6 @@ js_code = f"""
         let newLink = doc.createElement('link'); newLink.rel = 'apple-touch-icon'; newLink.href = 'data:image/png;base64,{img_b64}'; doc.head.appendChild(newLink);
     }}
     
-    // 【重要】Enterキーによるセル移動や確定を無効化（変換のみ機能させる）
-    doc.addEventListener('keydown', function(e) {{
-        if (e.key === 'Enter') {{
-            if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) {{
-                // パスワード入力欄（ログイン画面）でのEnterは許可し、それ以外のEnterはシステムへの伝播を止める
-                if (e.target.type !== 'password') {{
-                    e.stopImmediatePropagation();
-                    e.stopPropagation();
-                }}
-            }}
-        }}
-    }}, true);
-
     function formatTimeInput(target) {{
         let val = target.value; if (!val) return;
         let halfVal = val.replace(/[０-９]/g, function(s) {{ return String.fromCharCode(s.charCodeAt(0) - 0xFEE0); }});
@@ -163,14 +150,30 @@ js_code = f"""
         }}
     }}
     
-    // 時間自動フォーマット処理。Enterの伝播を止めたためTabキーとfocusout時のみ作動させます。
     doc.addEventListener('keydown', function(e) {{ 
-        if (e.key === 'Tab') {{ 
-            if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) {{ 
+        if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) {{ 
+            if (e.key === 'Enter' || e.key === 'Tab') {{
                 formatTimeInput(e.target); 
-            }} 
+            }}
+            
+            // 【強制ブロック処理】Enterキーで次のセルに移動するのを完全に防ぐ
+            if (e.key === 'Enter') {{
+                // パスワード入力や、Streamlit標準のセレクトボックス（検索窓）でのEnterは許可する
+                if (e.target.type === 'password' || 
+                    e.target.getAttribute('role') === 'combobox' || 
+                    e.target.getAttribute('aria-autocomplete') === 'list' ||
+                    e.target.closest('[data-baseweb="select"]') !== null) {{
+                    return;
+                }}
+                
+                // 上記以外の入力欄（データエディタのセルなど）では、
+                // Enterキーのシステムへの伝播を強制ストップし、セルの確定・移動を起こさせない
+                e.stopImmediatePropagation();
+                e.stopPropagation();
+            }}
         }} 
     }}, true);
+    
     doc.addEventListener('focusout', function(e) {{ 
         if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) {{ 
             formatTimeInput(e.target); 
