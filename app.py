@@ -133,6 +133,14 @@ js_code = f"""
         links.forEach(link => link.remove());
         let newLink = doc.createElement('link'); newLink.rel = 'apple-touch-icon'; newLink.href = 'data:image/png;base64,{img_b64}'; doc.head.appendChild(newLink);
     }}
+    
+    // 【重要】IME入力中（漢字変換中）のEnterキーでセルが閉じてしまうバグを防止
+    doc.addEventListener('keydown', function(e) {{
+        if (e.key === 'Enter' && e.isComposing) {{
+            e.stopPropagation();
+        }}
+    }}, true);
+
     function formatTimeInput(target) {{
         let val = target.value; if (!val) return;
         let halfVal = val.replace(/[０-９]/g, function(s) {{ return String.fromCharCode(s.charCodeAt(0) - 0xFEE0); }});
@@ -148,8 +156,18 @@ js_code = f"""
             }}
         }}
     }}
-    doc.addEventListener('keydown', function(e) {{ if (e.key === 'Enter' || e.key === 'Tab') {{ if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) {{ formatTimeInput(e.target); }} }} }}, true);
-    doc.addEventListener('focusout', function(e) {{ if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) {{ formatTimeInput(e.target); }} }}, true);
+    doc.addEventListener('keydown', function(e) {{ 
+        if (e.key === 'Enter' || e.key === 'Tab') {{ 
+            if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) {{ 
+                formatTimeInput(e.target); 
+            }} 
+        }} 
+    }}, true);
+    doc.addEventListener('focusout', function(e) {{ 
+        if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) {{ 
+            formatTimeInput(e.target); 
+        }} 
+    }}, true);
 </script>
 """
 st.markdown(js_code, unsafe_allow_html=True)
@@ -273,7 +291,7 @@ if menu == "一括入力":
     if missing_warning_html: st.markdown(missing_warning_html, unsafe_allow_html=True)
     f_date_batch = st.date_input("利用日 (全員共通)", jst_now.date(), max_value=jst_now.date())
     
-    # --- 一括入力用の過去ユーザーリスト (直近90日) ---
+    # --- 3ヶ月以内の利用者リストを取得 ---
     batch_user_list = ["-- 手入力 --"]
     df_history_batch = load_data()
     if not df_history_batch.empty:
@@ -282,7 +300,7 @@ if menu == "一括入力":
         batch_user_list += recent_df_batch['名前'].drop_duplicates().dropna().tolist()
 
     if "batch_data" not in st.session_state: 
-        st.session_state.batch_data = [{"学年": "--選択--", "氏名(選択)": "-- 手入力 --", "氏名(新規)": "", "開始時間": "", "終了時間": ""} for _ in range(25)]
+        st.session_state.batch_data = [{"学年": "--選択--", "氏名(過去の利用者)": "-- 手入力 --", "氏名(新規手入力)": "", "開始時間": "", "終了時間": ""} for _ in range(25)]
     df_empty = pd.DataFrame(st.session_state.batch_data)
     st.markdown("<p style='color:#64748B; font-weight:bold; margin-bottom:10px;'>過去の利用者から選ぶか、新規の場合は手入力欄に記入してください（選択した場合は学年が自動補完されます）。</p>", unsafe_allow_html=True)
     
@@ -290,16 +308,16 @@ if menu == "一括入力":
         df_empty,
         column_config={
             "学年": st.column_config.SelectboxColumn("学年", options=GRADES, width="small"),
-            "氏名(選択)": st.column_config.SelectboxColumn("氏名(過去の利用者)", options=batch_user_list, width="medium"),
-            "氏名(新規)": st.column_config.TextColumn("氏名(新規手入力)", width="medium"),
+            "氏名(過去の利用者)": st.column_config.SelectboxColumn("氏名(過去の利用者)", options=batch_user_list, width="medium"),
+            "氏名(新規手入力)": st.column_config.TextColumn("氏名(新規手入力)", width="medium"),
             "開始時間": st.column_config.TextColumn("開始時間 (例:1223)", width="small"),
             "終了時間": st.column_config.TextColumn("終了時間 (例:1530)", width="small"),
         },
-        column_order=["学年", "氏名(選択)", "氏名(新規)", "開始時間", "終了時間"], num_rows="dynamic", use_container_width=True, height=500, key=f"editor_{st.session_state.form_key}"
+        column_order=["学年", "氏名(過去の利用者)", "氏名(新規手入力)", "開始時間", "終了時間"], num_rows="dynamic", use_container_width=True, height=500, key=f"editor_{st.session_state.form_key}"
     )
     
     if st.button("表のデータをすべて保存する", type="primary", use_container_width=True):
-        valid_rows = edited_df[(edited_df["氏名(選択)"] != "-- 手入力 --") | (edited_df["氏名(新規)"].str.strip() != "")]
+        valid_rows = edited_df[(edited_df["氏名(過去の利用者)"] != "-- 手入力 --") | (edited_df["氏名(新規手入力)"].str.strip() != "")]
         if valid_rows.empty: st.error("氏名が入力されている行がありません。")
         else:
             new_records, error_msgs = [], []
@@ -312,8 +330,8 @@ if menu == "一括入力":
                 grade_lookup = dict(zip(recent_grades['名前'], recent_grades['学年']))
 
             for idx, row in valid_rows.iterrows():
-                name_sel = row.get("氏名(選択)", "-- 手入力 --")
-                name_man = str(row.get("氏名(新規)", ""))
+                name_sel = row.get("氏名(過去の利用者)", "-- 手入力 --")
+                name_man = str(row.get("氏名(新規手入力)", ""))
                 raw_name = name_sel if name_sel != "-- 手入力 --" else name_man
                 name = "".join(str(raw_name).split())
                 
@@ -350,7 +368,7 @@ if menu == "一括入力":
             if new_records:
                 df = pd.concat([df_current, pd.DataFrame(new_records)], ignore_index=True)
                 save_to_gs(df)
-                st.session_state.batch_data = [{"学年": "--選択--", "氏名(選択)": "-- 手入力 --", "氏名(新規)": "", "開始時間": "", "終了時間": ""} for _ in range(25)]
+                st.session_state.batch_data = [{"学年": "--選択--", "氏名(過去の利用者)": "-- 手入力 --", "氏名(新規手入力)": "", "開始時間": "", "終了時間": ""} for _ in range(25)]
                 st.session_state.form_key += 1
                 st.session_state.sys_msg = f"{len(new_records)}名分の記録を一括保存しました。（入力欄をリセットしました）"
                 st.cache_data.clear()
