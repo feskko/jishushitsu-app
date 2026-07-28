@@ -134,22 +134,23 @@ js_code = f"""
         let newLink = doc.createElement('link'); newLink.rel = 'apple-touch-icon'; newLink.href = 'data:image/png;base64,{img_b64}'; doc.head.appendChild(newLink);
     }}
     
-    // エンターキーによるセル移動・確定を完全にブロック（Windows IMEの変換確定のみ許可）
+    // 【修正】Mac/Windows共通: Enterキーによるセル移動を完全に無効化（変換確定のみ機能させる）
     const blockEnter = function(e) {{
         if (e.key === 'Enter' || e.keyCode === 13) {{
-            if (e.target && e.target.type === 'password') return; // ログイン画面は許可
-            
-            // Streamlit(React)側にEnterキーイベントが伝わるのを強制遮断
-            e.stopImmediatePropagation();
-            e.stopPropagation();
-            
-            // 変換中でない場合はブラウザのデフォルト操作も遮断（セルを移動しない）
-            if (!e.isComposing && e.keyCode !== 229) {{
-                e.preventDefault();
+            const t = e.target;
+            if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA')) {{
+                // パスワード枠やドロップダウン(selectbox)操作時のEnterは許可
+                if (t.type === 'password' || t.getAttribute('role') === 'combobox') return;
+                
+                // Streamlit側にEnterを検知させないことで、セルが閉じる・移動するのを防ぐ
+                e.stopPropagation();
+                e.stopImmediatePropagation();
             }}
         }}
     }};
+    
     doc.addEventListener('keydown', blockEnter, true);
+    doc.addEventListener('keypress', blockEnter, true);
     doc.addEventListener('keyup', blockEnter, true);
 
     function formatTimeInput(target) {{
@@ -167,6 +168,7 @@ js_code = f"""
             }}
         }}
     }}
+    
     doc.addEventListener('keydown', function(e) {{ 
         if (e.key === 'Tab') {{ 
             if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) {{ 
