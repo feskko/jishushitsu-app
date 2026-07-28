@@ -220,7 +220,7 @@ def load_data():
         df = pd.DataFrame(workbook.worksheet("メイン").get_all_records())
         if not df.empty: 
             df['日付'] = pd.to_datetime(df['日付'])
-            df['名前'] = df['名前'].astype(str).str.replace(r'[ \s ]+', '', regex=True)
+            df['名前'] = df['名前'].astype(str).str.replace(' ', '').str.replace(' ', '')
         return df
     except: return pd.DataFrame(columns=['日付', '名前', '学年', '入室時間', '退室時間', '利用時間（時間）'])
 
