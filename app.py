@@ -356,7 +356,13 @@ if menu == "一括入力":
 
         for row in batch_data_inputs:
             name_sel = row["氏名(過去)"]
-            name_man = str(row["氏名(新規)"])
+            name_man = str(row["氏名(新規)"]).strip()
+            
+            if name_sel != "-- 手入力 --" and name_man != "":
+                error_msgs.append(f"過去の利用者（{name_sel}）と新規手入力（{name_man}）の両方が入力されています。どちらか一方のみにしてください。")
+                has_input = True
+                continue
+                
             raw_name = name_sel if name_sel != "-- 手入力 --" else name_man
             name = "".join(str(raw_name).split())
             
