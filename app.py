@@ -134,11 +134,16 @@ js_code = f"""
         let newLink = doc.createElement('link'); newLink.rel = 'apple-touch-icon'; newLink.href = 'data:image/png;base64,{img_b64}'; doc.head.appendChild(newLink);
     }}
     
-    // 【追加】IME（漢字変換）中のEnterキーでセルが意図せず閉じるのを防止
+    // 【重要】Enterキーによるセル移動や確定を無効化（変換のみ機能させる）
     doc.addEventListener('keydown', function(e) {{
-        if (e.key === 'Enter' && (e.isComposing || e.keyCode === 229)) {{
-            e.stopImmediatePropagation();
-            e.stopPropagation();
+        if (e.key === 'Enter') {{
+            if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) {{
+                // パスワード入力欄（ログイン画面）でのEnterは許可し、それ以外のEnterはシステムへの伝播を止める
+                if (e.target.type !== 'password') {{
+                    e.stopImmediatePropagation();
+                    e.stopPropagation();
+                }}
+            }}
         }}
     }}, true);
 
@@ -157,8 +162,20 @@ js_code = f"""
             }}
         }}
     }}
-    doc.addEventListener('keydown', function(e) {{ if (e.key === 'Enter' || e.key === 'Tab') {{ if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) {{ formatTimeInput(e.target); }} }} }}, true);
-    doc.addEventListener('focusout', function(e) {{ if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) {{ formatTimeInput(e.target); }} }}, true);
+    
+    // 時間自動フォーマット処理。Enterの伝播を止めたためTabキーとfocusout時のみ作動させます。
+    doc.addEventListener('keydown', function(e) {{ 
+        if (e.key === 'Tab') {{ 
+            if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) {{ 
+                formatTimeInput(e.target); 
+            }} 
+        }} 
+    }}, true);
+    doc.addEventListener('focusout', function(e) {{ 
+        if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) {{ 
+            formatTimeInput(e.target); 
+        }} 
+    }}, true);
 </script>
 """
 st.markdown(js_code, unsafe_allow_html=True)
