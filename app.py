@@ -134,9 +134,10 @@ js_code = f"""
         let newLink = doc.createElement('link'); newLink.rel = 'apple-touch-icon'; newLink.href = 'data:image/png;base64,{img_b64}'; doc.head.appendChild(newLink);
     }}
     
-    // 【重要】IME入力中（漢字変換中）のEnterキーでセルが閉じてしまうバグを防止
+    // 【追加】IME（漢字変換）中のEnterキーでセルが意図せず閉じるのを防止
     doc.addEventListener('keydown', function(e) {{
-        if (e.key === 'Enter' && e.isComposing) {{
+        if (e.key === 'Enter' && (e.isComposing || e.keyCode === 229)) {{
+            e.stopImmediatePropagation();
             e.stopPropagation();
         }}
     }}, true);
@@ -156,18 +157,8 @@ js_code = f"""
             }}
         }}
     }}
-    doc.addEventListener('keydown', function(e) {{ 
-        if (e.key === 'Enter' || e.key === 'Tab') {{ 
-            if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) {{ 
-                formatTimeInput(e.target); 
-            }} 
-        }} 
-    }}, true);
-    doc.addEventListener('focusout', function(e) {{ 
-        if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) {{ 
-            formatTimeInput(e.target); 
-        }} 
-    }}, true);
+    doc.addEventListener('keydown', function(e) {{ if (e.key === 'Enter' || e.key === 'Tab') {{ if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) {{ formatTimeInput(e.target); }} }} }}, true);
+    doc.addEventListener('focusout', function(e) {{ if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) {{ formatTimeInput(e.target); }} }}, true);
 </script>
 """
 st.markdown(js_code, unsafe_allow_html=True)
@@ -291,7 +282,7 @@ if menu == "一括入力":
     if missing_warning_html: st.markdown(missing_warning_html, unsafe_allow_html=True)
     f_date_batch = st.date_input("利用日 (全員共通)", jst_now.date(), max_value=jst_now.date())
     
-    # --- 3ヶ月以内の利用者リストを取得 ---
+    # --- 一括入力用の過去ユーザーリスト (直近90日) ---
     batch_user_list = ["-- 手入力 --"]
     df_history_batch = load_data()
     if not df_history_batch.empty:
