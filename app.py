@@ -551,6 +551,13 @@ elif menu == "分析":
     jst_today = pd.Timestamp(jst_now.date())
 
     if not df_ana.empty:
+        # --- 月間利用トレンドグラフの追加 ---
+        st.markdown("<div class='section-title'>月間利用時間トレンド</div>", unsafe_allow_html=True)
+        df_trend = df_ana.copy()
+        df_trend['年月'] = df_trend['日付'].dt.strftime('%Y-%m')
+        trend_agg = df_trend.groupby('年月')['利用時間（時間）'].sum().reset_index()
+        st.bar_chart(trend_agg.set_index('年月')['利用時間（時間）'])
+
         this_month_start = jst_today.replace(day=1)
         last_month_start = (this_month_start - pd.Timedelta(days=1)).replace(day=1)
         last_month_end = this_month_start - pd.Timedelta(days=1)
@@ -629,6 +636,34 @@ elif menu == "分析":
             </div>
         </div>
         """, unsafe_allow_html=True)
+        
+        # --- 先月立てた当月予測の振り返り（フィードバック） ---
+        if hours_last > 0:
+            growth_rate_h_prev = pct_hours_last / 100.0 if pct_hours_last != 100 else 0
+            predicted_this_month_h = hours_last * (1 + max(min(growth_rate_h_prev, 0.15), -0.15))
+            
+            diff_pred = proj_hours_this_month - predicted_this_month_h
+            diff_pct = (diff_pred / predicted_this_month_h) * 100 if predicted_this_month_h > 0 else 0
+            
+            if abs(diff_pct) <= 5:
+                eval_msg = "🎯 <b>非常に高い精度</b>で推移しています（ほぼ予測通り）。"
+            elif abs(diff_pct) <= 15:
+                eval_msg = "✅ <b>概ね予測通り</b>に推移しています。"
+            elif diff_pct > 15:
+                eval_msg = "🚀 予測を<b>大きく上回るペース</b>で推移しています。"
+            else:
+                eval_msg = "📉 予測を<b>下回るペース</b>で推移しています。"
+                
+            st.markdown(f"""
+            <div style='background-color: #F8FAFC; border-left: 6px solid #64748B; padding: 15px; border-radius: 8px; margin-top: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.02);'>
+                <div style='font-weight: 800; color: #475569; margin-bottom: 5px; font-size: 1.05rem;'>📊 予測モデルのフィードバック（当月の着地予想）</div>
+                <div style='color: #475569; font-size: 0.95rem; line-height: 1.6;'>
+                    先月末にシステムが計算した今月の予測値は <b>約 {predicted_this_month_h:.0f} 時間</b> でした。<br>
+                    現在のペースに基づく今月の最新推計（約 {proj_hours_this_month:.0f} 時間）と比較すると、当初の予測に対して <b>{diff_pct:+.1f}%</b> の差となっており、{eval_msg}
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
     else: st.info("データが蓄積されると前月比の利用率が表示されます。")
         
     st.markdown("<hr style='margin: 30px 0;'>", unsafe_allow_html=True)
