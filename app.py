@@ -800,10 +800,10 @@ elif menu == "分析":
                 for _, row in sample_df.iterrows():
                     if not row['入室時間'] or not row['退室時間']: continue
                     try:
-                            for slot in get_active_slots(row['入室時間'], row['退室時間'], pred_time_slots): 
-                                if slot in predict_data.columns:
-                                    predict_data.loc[wd, slot] += (weight / div_factor) * mult
-                        except: continue
+                        for slot in get_active_slots(row['入室時間'], row['退室時間'], pred_time_slots): 
+                            if slot in predict_data.columns:
+                                predict_data.loc[wd, slot] += weight * mult
+                    except: continue
 
             html = "<div style='overflow-x: auto; background: white; padding: 15px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); border: 1px solid #E2E8F0;'><table style='width:100%; border-collapse: collapse; min-width: 600px;'>"
             html += "<tr><th style='border: 1px solid #CBD5E1; padding: 10px; background-color: #F8FAFC; color: #0F172A; position: sticky; left: 0; z-index: 1;'>曜日</th>"
