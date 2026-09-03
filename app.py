@@ -671,7 +671,7 @@ elif menu == "分析":
                 
             st.markdown(f"""
             <div style='background-color: #F8FAFC; border-left: 6px solid #64748B; padding: 15px; border-radius: 8px; margin-top: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.02);'>
-                <div style='font-weight: 800; color: #475569; margin-bottom: 5px; font-size: 1.05rem;'>📊 先月の予測モデルの振り返り（前々月末の予測 vs 先月の実際の結果）</div>
+                <div style='font-weight: 800; color: #475569; margin-bottom: 5px; font-size: 1.05rem;'>📊 先月の予測モデルの振り返り（前々月時点での翌月の予測 と 先月の実際の結果の比較）</div>
                 <div style='color: #475569; font-size: 0.95rem; line-height: 1.6;'>
                     前々月末の段階でシステムが予測していた先月（{last_month_start.month}月）の総学習時間予測は <b>約 {predicted_last_month_h:.0f} 時間</b> でした。<br>
                     それに対する先月の実際の総学習時間（実績：<b>{hours_last:.1f} 時間</b>）との差は <b>{diff_pct_last:+.1f}%</b> であり、{eval_msg_last}
