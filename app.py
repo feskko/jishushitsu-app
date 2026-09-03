@@ -800,34 +800,34 @@ elif menu == "分析":
                 for _, row in sample_df.iterrows():
                     if not row['入室時間'] or not row['退室時間']: continue
                     try:
-                        past_status = get_period_status(row['dt'])
-                        div_factor = test_mult if past_status == "test" else (before_mult if past_status == "before_test" else 1.0)
-                        
-                        for slot in get_active_slots(row['入室時間'], row['退室時間'], pred_time_slots): 
-                            if slot in predict_data.columns:
-                                predict_data.loc[wd, slot] += (weight / div_factor) * mult
-                    except: continue
+                            for slot in get_active_slots(row['入室時間'], row['退室時間'], pred_time_slots): 
+                                if slot in predict_data.columns:
+                                    predict_data.loc[wd, slot] += (weight / div_factor) * mult
+                        except: continue
 
             html = "<div style='overflow-x: auto; background: white; padding: 15px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); border: 1px solid #E2E8F0;'><table style='width:100%; border-collapse: collapse; min-width: 600px;'>"
             html += "<tr><th style='border: 1px solid #CBD5E1; padding: 10px; background-color: #F8FAFC; color: #0F172A; position: sticky; left: 0; z-index: 1;'>曜日</th>"
-                for tb in pred_time_slots: html += f"<th style='border: 1px solid #CBD5E1; padding: 10px; background-color: #F8FAFC; color: #0F172A; font-size:0.85rem;'>{tb[:2]}時台</th>"
-                html += "</tr>"
+            for tb in pred_time_slots: html += f"<th style='border: 1px solid #CBD5E1; padding: 10px; background-color: #F8FAFC; color: #0F172A; font-size:0.85rem;'>{tb[:2]}時台</th>"
+            html += "</tr>"
 
-                for wd in weekdays:
-                    html += f"<tr><th style='border: 1px solid #CBD5E1; padding: 10px; background-color: #F8FAFC; color: #0F172A; position: sticky; left: 0; z-index: 1;'>{wd}</th>"
-                    for tb in pred_time_slots:
-                        val = predict_data.loc[wd, tb]
-                        ratio = min(val / 20.0, 1.0)
-                        rounded_val = int(round(val))
-                        if rounded_val >= 20: bg_color, font_color, display_val = "rgba(220, 38, 38, 0.9)", "white", "満席"
-                        elif rounded_val >= 15: bg_color, font_color, display_val = f"rgba(234, 88, 12, {max(0.6, ratio)})", "white", f"約{rounded_val}人"
-                        elif rounded_val > 0: bg_color, font_color, display_val = f"rgba(37, 99, 235, {ratio * 0.8})", ("white" if ratio > 0.4 else "#1E293B"), f"約{rounded_val}人"
-                        else: bg_color, font_color, display_val = "transparent", "#1E293B", "-"
-                        html += f"<td style='border: 1px solid #CBD5E1; padding: 10px; text-align: center; font-size:0.85rem; font-weight: bold; background-color: {bg_color}; color: {font_color};'>{display_val}</td>"
-                    html += "</tr>"
-                html += "</table></div>"
+            for wd in weekdays:
+                html += f"<tr><th style='border: 1px solid #CBD5E1; padding: 10px; background-color: #F8FAFC; color: #0F172A; position: sticky; left: 0; z-index: 1;'>{wd}</th>"
+                for tb in pred_time_slots:
+                    val = predict_data.loc[wd, tb]
+                    ratio = min(val / 20.0, 1.0)
+                    rounded_val = int(round(val))
+                    if rounded_val >= 20: bg_color, font_color, display_val = "rgba(220, 38, 38, 0.9)", "white", "満席"
+                    elif rounded_val >= 15: bg_color, font_color, display_val = f"rgba(234, 88, 12, {max(0.6, ratio)})", "white", f"約{rounded_val}人"
+                    elif rounded_val > 0: bg_color, font_color, display_val = f"rgba(37, 99, 235, {ratio * 0.8})", ("white" if ratio > 0.4 else "#1E293B"), f"約{rounded_val}人"
+                    else: bg_color, font_color, display_val = "transparent", "#1E293B", "-"
+                    html += f"<td style='border: 1px solid #CBD5E1; padding: 10px; text-align: center; font-size:0.85rem; font-weight: bold; background-color: {bg_color}; color: {font_color};'>{display_val}</td>"
+                html += "</tr>"
+            html += "</table></div>"
+            
+            if predict_data.sum().sum() > 0:
                 st.markdown(html, unsafe_allow_html=True)
-            else: st.info("直近4週間のデータがないため、予測を計算できません。")
+            else:
+                st.info("過去の類似データが不足しているため、予測を計算できませんでした。")
         else: st.info("集計するデータがありません。")
 
 elif menu == "管理":
