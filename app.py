@@ -637,29 +637,44 @@ elif menu == "分析":
         </div>
         """, unsafe_allow_html=True)
         
-        # --- 先月立てた当月予測の振り返り（フィードバック） ---
-        if hours_last > 0:
-            growth_rate_h_prev = pct_hours_last / 100.0 if pct_hours_last != 100 else 0
-            predicted_this_month_h = hours_last * (1 + max(min(growth_rate_h_prev, 0.15), -0.15))
+        # --- 前月の予測に対するフィードバック（前々月時点の予測 vs 先月の実際の結果） ---
+        # 前々月の総学習時間を取得
+        hours_2mo = df_2mo_f['利用時間（時間）'].sum()
+        if hours_2mo > 0:
+            # 前々月の実績をもとに、先月時点（前々月末）で予測していた先月の予想値を再現するための計算
+            # （先月の前月比成長率pct_hours_lastを逆算、あるいは前々月から先月同日比較の成長率を模す）
+            # ここでは「前々月の実績 × (1 + 前々月と3ヶ月前の成長率、または直近のトレンド)」を簡便に再現するか、
+            # あるいは「前々月の実績」に単純に当時の成長率を適用した値と比較します。
+            # 安全のため、前々月の実績をベースにした前月予測値（近似）を算出します。
+            # ※より厳密には、前月時点の速報データからの予測値が必要です。ここでは、先月の確定実績(hours_last)と、
+            # 「前々月末時点での成長予測」を対比させます。
             
-            diff_pred = proj_hours_this_month - predicted_this_month_h
-            diff_pct = (diff_pred / predicted_this_month_h) * 100 if predicted_this_month_h > 0 else 0
+            # 前々月とさらにその前の月のデータから、前々月末に想定されていた成長率を推計
+            df_3mo_f = df_ana[(df_ana['日付'] >= (two_months_ago_start - pd.DateOffset(months=1))) & (df_ana['日付'] < two_months_ago_start)]
+            hours_3mo = df_3mo_f['利用時間（時間）'].sum()
+            prev_growth_rate = (hours_2mo - hours_3mo) / hours_3mo if hours_3mo > 0 else 0
             
-            if abs(diff_pct) <= 5:
-                eval_msg = "🎯 <b>非常に高い精度</b>で推移しています（ほぼ予測通り）。"
-            elif abs(diff_pct) <= 15:
-                eval_msg = "✅ <b>概ね予測通り</b>に推移しています。"
-            elif diff_pct > 15:
-                eval_msg = "🚀 予測を<b>大きく上回るペース</b>で推移しています。"
+            # 前々月末にシステムが予測していた「先月の予測値」
+            predicted_last_month_h = hours_2mo * (1 + max(min(prev_growth_rate, 0.15), -0.15))
+            
+            diff_pred_last = hours_last - predicted_last_month_h
+            diff_pct_last = (diff_pred_last / predicted_last_month_h) * 100 if predicted_last_month_h > 0 else 0
+            
+            if abs(diff_pct_last) <= 5:
+                eval_msg_last = "🎯 <b>非常に高い精度</b>で予測が的中しました（ほぼ予測通り）。"
+            elif abs(diff_pct_last) <= 15:
+                eval_msg_last = "✅ <b>概ね予測通り</b>の着地となりました。"
+            elif diff_pred_last > 0:
+                eval_msg_last = "🚀 実際の利用が予測を<b>大きく上回る伸び</b>を見せました。"
             else:
-                eval_msg = "📉 予測を<b>下回るペース</b>で推移しています。"
+                eval_msg_last = "📉 実際の利用が予測を<b>下回る結果</b>となりました。"
                 
             st.markdown(f"""
             <div style='background-color: #F8FAFC; border-left: 6px solid #64748B; padding: 15px; border-radius: 8px; margin-top: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.02);'>
-                <div style='font-weight: 800; color: #475569; margin-bottom: 5px; font-size: 1.05rem;'>📊 予測モデルのフィードバック（当月の着地予想）</div>
+                <div style='font-weight: 800; color: #475569; margin-bottom: 5px; font-size: 1.05rem;'>📊 先月の予測モデルの振り返り（前々月末の予測 vs 先月の実際の結果）</div>
                 <div style='color: #475569; font-size: 0.95rem; line-height: 1.6;'>
-                    先月末にシステムが計算した今月の予測値は <b>約 {predicted_this_month_h:.0f} 時間</b> でした。<br>
-                    現在のペースに基づく今月の最新推計（約 {proj_hours_this_month:.0f} 時間）と比較すると、当初の予測に対して <b>{diff_pct:+.1f}%</b> の差となっており、{eval_msg}
+                    前々月末の段階でシステムが予測していた先月（{last_month_start.month}月）の総学習時間予測は <b>約 {predicted_last_month_h:.0f} 時間</b> でした。<br>
+                    それに対する先月の実際の総学習時間（実績：<b>{hours_last:.1f} 時間</b>）との差は <b>{diff_pct_last:+.1f}%</b> であり、{eval_msg_last}
                 </div>
             </div>
             """, unsafe_allow_html=True)
