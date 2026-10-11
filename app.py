@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
 from datetime import datetime, timedelta, timezone
 import gspread
 from google.oauth2.service_account import Credentials
@@ -23,62 +24,6 @@ def is_special_period(dt_date):
     # 冬季講習: 12/1 〜 1/7
     if m == 12 or (m == 1 and d <= 7): return True
     return False
-
-# 年間のテスト期間の定義
-TEST_PERIODS = [
-    (5, 11, 5, 20),   # 5月中旬
-    (6, 21, 6, 30),   # 6月下旬
-    (7, 1, 7, 10),    # 7月上旬
-    (9, 1, 9, 10),    # 9月上旬
-    (10, 11, 10, 20), # 10月中旬
-    (11, 1, 11, 10),  # 11月上旬
-    (12, 1, 12, 10),  # 12月上旬
-    (2, 20, 2, 29)    # 2月下旬
-]
-
-def get_period_status(dt_date):
-    if dt_date is None: return "normal"
-    y = dt_date.year
-    curr_date = dt_date.date() if isinstance(dt_date, datetime) else dt_date
-    for tm1, td1, tm2, td2 in TEST_PERIODS:
-        try:
-            start_date = datetime(y, tm1, td1).date()
-            if tm2 == 2 and td2 == 29:
-                is_leap = y % 4 == 0 and (y % 100 != 0 or y % 400 == 0)
-                end_date = datetime(y, 2, 29 if is_leap else 28).date()
-            else:
-                end_date = datetime(y, tm2, td2).date()
-        except: continue
-        before_start = start_date - timedelta(days=7)
-        before_end = start_date - timedelta(days=1)
-        if start_date <= curr_date <= end_date: return "test"
-        elif before_start <= curr_date <= before_end: return "before_test"
-    return "normal"
-
-def learn_multipliers(df):
-    default_test, default_before = 1.5, 1.2
-    if df.empty: return default_test, default_before
-    try:
-        temp_df = df.copy()
-        temp_df['date_only'] = temp_df['日付'].dt.date
-        daily_users = temp_df.groupby('date_only')['名前'].nunique().reset_index()
-        daily_users['status'] = daily_users['date_only'].apply(get_period_status)
-        counts = daily_users.groupby('status')['名前'].agg(['mean', 'count'])
-        normal_mean = counts.loc['normal', 'mean'] if 'normal' in counts.index and counts.loc['normal', 'count'] >= 5 else None
-        
-        test_mult = default_test
-        if 'test' in counts.index and counts.loc['test', 'count'] >= 3 and normal_mean and normal_mean > 0:
-            actual_mult = max(1.0, min(counts.loc['test', 'mean'] / normal_mean, 3.0))
-            weight = min(counts.loc['test', 'count'] / 10.0, 1.0)
-            test_mult = default_test * (1 - weight) + actual_mult * weight
-
-        before_mult = default_before
-        if 'before_test' in counts.index and counts.loc['before_test', 'count'] >= 3 and normal_mean and normal_mean > 0:
-            actual_mult = max(1.0, min(counts.loc['before_test', 'mean'] / normal_mean, 2.5))
-            weight = min(counts.loc['before_test', 'count'] / 10.0, 1.0)
-            before_mult = default_before * (1 - weight) + actual_mult * weight
-        return test_mult, before_mult
-    except: return default_test, default_before
 
 def get_time_slots_for_period(period_str):
     if period_str == "累計": return [f"{h:02d}:00" for h in range(9, 23)]
@@ -119,6 +64,328 @@ def format_time_input(key):
     val = st.session_state.get(key, "")
     parsed = parse_custom_time(val)
     if parsed: st.session_state[key] = parsed.strftime("%H:%M")
+
+# =====================================================================
+# 混雑予測モデル
+#   学年グループ別の「罰則付きポアソン回帰」。2026年10月に、過去データでの
+#   答え合わせ（時系列の交差検証）をして設定を決めたもの。
+#   講習・テスト・休館の日付は、下の「期間の設定」を毎年見直してください。
+# =====================================================================
+
+# ---------- 期間の設定（月, 日） ----------
+KOSHU_RULE = [("春期講習", (3, 20), (4, 5)), ("夏期講習", (7, 20), (8, 31)), ("冬期講習", (12, 20), (1, 7))]
+TEST_RULE = [("1学期中間", (5, 11), (5, 31)), ("1学期期末", (6, 21), (7, 10)), ("2学期中間", (10, 1), (10, 20)),
+             ("2学期期末", (11, 11), (11, 30)), ("学年末", (2, 11), (2, 28))]
+CLOSED_RULE = [("お盆", (8, 11), (8, 15)), ("年末年始", (12, 29), (1, 3))]  # ほかにGW(5/3〜5/5と振替休日)、講習期間以外の日曜
+PERIOD_OVERRIDES = {("夏期講習", 2026): ("2026-07-18", "2026-08-31")}     # 実際の日付が目安とずれた年はここに書く
+KOU3_EXAM = ((1, 18), (2, 28))     # 高3の受験期（データがないので倍率は画面で選ぶ）
+KOU3_AFTER = ((3, 1), (3, 31))     # 高3の卒業後
+TRAIN_START = "2026-06-04"         # これより前は試用期間（コマ記録）なので学習に使わない
+SEATS_DEFAULT = 20
+KOU3_SCENARIOS = {"そのまま来る": (1.0, 1.0), "受験期は半分・3月はほぼ来ない": (0.5, 0.1), "受験期から来ない": (0.0, 0.0)}
+
+# ---------- モデルの設定（交差検証で選んだ値） ----------
+MODEL_SETTINGS = dict(lam_dev=2.0, lam_dow=2.0, lam_trend=20.0, knot_days=28,
+                      lam_test=0.05, lam_test_dev=4.0, lam_ramp=2.0, half_life=42)
+# 予測の80%範囲: (実際 − 予測) / √(予測+1) の10%点・90%点（何日先かで変わる）
+PRED_BANDS = [(7, -1.096, 1.158), (14, -1.050, 1.485), (10**6, -1.014, 1.679)]
+GROUPS = ["小学生", "中学生", "高1・高2", "高3・既卒"]
+GRADE_GROUP = {**{f"小{i}": "小学生" for i in range(1, 7)}, **{f"中{i}": "中学生" for i in range(1, 4)},
+               "高1": "高1・高2", "高2": "高1・高2", "高3": "高3・既卒", "既卒/その他": "高3・既卒"}
+OPEN_HOURS = {"平日": range(12, 22), "土曜祝日": range(12, 22), "講習": range(9, 22), "講習日曜": range(9, 21)}
+PRED_HOURS = list(range(9, 22))
+KOMA_TABLE = {3: ("10:55", "12:15"), 4: ("13:10", "14:30"), 5: ("14:40", "16:00"),
+              6: ("17:00", "18:20"), 7: ("18:30", "19:50"), 8: ("20:00", "21:20")}
+T0 = pd.Timestamp("2026-05-01")
+WEEKDAYS_JA = ["月", "火", "水", "木", "金", "土", "日"]
+
+
+def _nth_monday(y, m, n):
+    first = datetime(y, m, 1)
+    return (first + timedelta(days=(7 - first.weekday()) % 7 + 7 * (n - 1))).date()
+
+
+def jp_holidays(y):
+    """日本の祝日（振替休日・国民の休日を含む）"""
+    d = lambda m, dd: datetime(y, m, dd).date()  # noqa: E731
+    shunbun = int(20.8431 + 0.242194 * (y - 1980) - int((y - 1980) / 4))
+    shubun = int(23.2488 + 0.242194 * (y - 1980) - int((y - 1980) / 4))
+    hol = {d(1, 1), _nth_monday(y, 1, 2), d(2, 11), d(2, 23), d(3, shunbun), d(4, 29), d(5, 3), d(5, 4), d(5, 5),
+           _nth_monday(y, 7, 3), d(8, 11), _nth_monday(y, 9, 3), d(9, shubun), _nth_monday(y, 10, 2),
+           d(11, 3), d(11, 23)}
+    for h in sorted(hol):
+        if h.weekday() == 6:  # 振替休日
+            nxt = h + timedelta(days=1)
+            while nxt in hol:
+                nxt += timedelta(days=1)
+            hol.add(nxt)
+    for h in sorted(hol):  # 国民の休日（祝日にはさまれた日）
+        mid = h + timedelta(days=1)
+        if mid not in hol and (h + timedelta(days=2)) in hol and mid.weekday() != 6:
+            hol.add(mid)
+    return hol
+
+
+def _md_date(y, md):
+    m, dd = md
+    last = (datetime(y + (m == 12), m % 12 + 1, 1) - timedelta(days=1)).day
+    return pd.Timestamp(datetime(y, m, min(dd, last)))
+
+
+def _expand(rule, years):
+    out = []
+    for name, s, e in rule:
+        for y in years:
+            a = _md_date(y, s)
+            b = _md_date(y + (e < s), e)
+            if (name, y) in PERIOD_OVERRIDES:
+                a, b = map(pd.Timestamp, PERIOD_OVERRIDES[(name, y)])
+            out.append((name, a, b))
+    return out
+
+
+def crowd_calendar(start, end):
+    """日ごとの曜日タイプ・休館・講習・テスト期間"""
+    c = pd.DataFrame({"date": pd.date_range(start, end)})
+    years = range(c.date.min().year - 1, c.date.max().year + 2)
+    hol = set().union(*[jp_holidays(y) for y in years])
+    c["dow"] = c.date.dt.dayofweek
+    c["holiday"] = c.date.dt.date.isin(hol)
+    c["koshu"], c["koshu_prog"] = False, 0
+    for _, a, b in _expand(KOSHU_RULE, years):
+        m = c.date.between(a, b)
+        c.loc[m, "koshu"] = True
+        c.loc[m, "koshu_prog"] = (c.loc[m, "date"] - a).dt.days
+    c["test_name"], c["test_day"] = "", -1
+    for name, a, b in _expand(TEST_RULE, years):
+        m = c.date.between(a, b)
+        c.loc[m, "test_name"] = name
+        c.loc[m, "test_day"] = (c.loc[m, "date"] - a).dt.days
+    c["test_early"] = c.test_day.between(0, 13)   # テスト期間の最初の2週間
+    c["test_late"] = c.test_day >= 14
+    c["daytype"] = np.select([c.koshu & (c.dow == 6), c.koshu, c.dow == 6, c.holiday | (c.dow == 5)],
+                             ["講習日曜", "講習", "休館", "土曜祝日"], default="平日")
+    c["closed_reason"] = np.where(c.daytype == "休館", "日曜", "")
+    md = c.date.dt.month * 100 + c.date.dt.day
+    gw = md.between(503, 505) | (md.between(506, 506) & c.holiday)
+    c.loc[gw, "closed_reason"] = "GW"
+    for name, a, b in _expand(CLOSED_RULE, years):
+        c.loc[c.date.between(a, b), "closed_reason"] = name
+    c["closed"] = c.closed_reason != ""
+    c["t"] = (c.date - T0).dt.days
+    return c
+
+
+def _to_min(s, is_exit):
+    s = unicodedata.normalize("NFKC", str(s)).strip()
+    if s.endswith("コマ"):
+        try:
+            n = int(s[:-2])
+        except ValueError:
+            return np.nan
+        if n in KOMA_TABLE:
+            hm = KOMA_TABLE[n][1 if is_exit else 0]
+            return int(hm[:2]) * 60 + int(hm[3:])
+        start = 17 * 60 + (n - 6) * 90
+        return start + (80 if is_exit else 0)
+    parts = s.split(":")
+    try:
+        return int(parts[0]) * 60 + int(parts[1])
+    except (ValueError, IndexError):
+        return np.nan
+
+
+def _occupancy(df):
+    """利用記録 → 日付×時間帯×学年グループの平均在室人数（1時間の在室分数/60）"""
+    v = pd.DataFrame({"date": pd.to_datetime(df["日付"]).dt.normalize(),
+                      "group": df["学年"].map(GRADE_GROUP).fillna("不明"),
+                      "in": [_to_min(x, False) for x in df["入室時間"]],
+                      "out": [_to_min(x, True) for x in df["退室時間"]]})
+    v = v[v["in"].notna() & v["out"].notna() & (v["out"] > v["in"]) & (v["out"] - v["in"] <= 13 * 60)]
+    hs = np.array(PRED_HOURS) * 60
+    ov = np.clip(np.minimum(v["out"].to_numpy()[:, None], hs + 60) - np.maximum(v["in"].to_numpy()[:, None], hs), 0, 60) / 60
+    occ = pd.DataFrame(ov, columns=PRED_HOURS)
+    occ["date"], occ["group"] = v["date"].to_numpy(), v["group"].to_numpy()
+    occ = occ.melt(id_vars=["date", "group"], var_name="hour", value_name="occ")
+    occ = occ[occ.occ > 0].groupby(["date", "hour", "group"], as_index=False).occ.sum()
+    occ["hour"] = occ["hour"].astype(int)
+    # 学年未入力の在室は、同じ日・時間の学年構成（なければ全期間の時間別構成）で按分
+    known, unk = occ[occ.group != "不明"], occ[occ.group == "不明"]
+    if len(unk):
+        base = known.groupby(["hour", "group"]).occ.sum() / known.groupby("hour").occ.sum()
+        add = []
+        for r in unk.itertuples(index=False):
+            same = known[(known.date == r.date) & (known.hour == r.hour)]
+            share = same.set_index("group").occ / same.occ.sum() if same.occ.sum() > 0 else base.loc[r.hour]
+            add += [(r.date, r.hour, g, r.occ * s) for g, s in share.items()]
+        occ = pd.concat([known, pd.DataFrame(add, columns=["date", "hour", "group", "occ"])])
+        occ = occ.groupby(["date", "hour", "group"], as_index=False).occ.sum()
+    return occ, set(v["date"])
+
+
+def _rows_for(cal):
+    days = cal[~cal.closed]
+    rows = [(d.date, h, g) for d in days.itertuples() for h in OPEN_HOURS[d.daytype] for g in GROUPS]
+    return pd.DataFrame(rows, columns=["date", "hour", "group"]).merge(cal, on="date")
+
+
+def _obj(s):
+    return s.astype(str).to_numpy(dtype=object)
+
+
+class CrowdModel:
+    """log(平均在室人数) = 曜日タイプ×時間帯 + 学年ごとのずれ + 曜日 + 学年別トレンド
+                         + 講習中の盛り上がり + テスト期間（前半・後半）  をリッジ罰則つきで推定"""
+
+    def __init__(self, s):
+        self.s = s
+
+    def _cols(self, d):
+        s, F = self.s, {}
+        g, dt, h = _obj(d.group), _obj(d.daytype_fb), _obj(d.hour)
+        dow, tnum = d.dow.to_numpy(), d.t.to_numpy(dtype=float)
+        F["切片"] = (np.ones(len(d)), 1e-6)
+        dth, gdt = dt + "|" + h, g + "|" + dt
+        gdth = gdt + "|" + h
+        for k in sorted(self.dt_h):
+            F["形" + k] = ((dth == k).astype(float), 1e-4)
+        for k in sorted(self.g_dt):
+            F["水準" + k] = ((gdt == k).astype(float), 1e-4)
+        for k in sorted(self.g_dt_h):
+            F["学年差" + k] = ((gdth == k).astype(float), s["lam_dev"])
+        tt = np.minimum(tnum, self.t_max) / 30
+        kp = np.minimum(d.koshu_prog.to_numpy(dtype=float), self.kp_max) / 30
+        no3 = ~((g == "高3・既卒") & (_obj(d.test_name) == "学年末"))   # 学年末テストは高3には無い
+        te = d.test_early.to_numpy(dtype=bool) & no3
+        tl = d.test_late.to_numpy(dtype=bool) & no3
+        F["講習の伸び"] = (kp, 0.1)
+        F["テスト前半"] = (te.astype(float), s["lam_test"])
+        F["テスト後半"] = (tl.astype(float), s["lam_test"])
+        for gg in GROUPS:
+            ig = (g == gg)
+            for dw in range(1, 5):
+                F[f"曜日{gg}{dw}"] = ((dt == "平日") & ig & (dow == dw)).astype(float), s["lam_dow"]
+            F[f"トレンド{gg}"] = (ig * tt, 0.5)
+            for k in self.knots:
+                F[f"トレンド{gg}>{k}"] = (ig * np.maximum(0, tt - k / 30), s["lam_trend"])
+            F[f"講習の伸び{gg}"] = (ig * kp, s["lam_ramp"])
+            F[f"テスト前半{gg}"] = ((te & ig).astype(float), s["lam_test_dev"])
+            F[f"テスト後半{gg}"] = ((tl & ig).astype(float), s["lam_test_dev"])
+        return F
+
+    def _X(self, d):
+        d = d.assign(daytype_fb=d.daytype.where(d.daytype.isin(list(self.daytypes)), "土曜祝日"))
+        F = self._cols(d)
+        return np.column_stack([F[c][0] for c in self.names]), np.array([F[c][1] for c in self.names])
+
+    def fit(self, d):
+        s = self.s
+        self.daytypes = set(d.daytype)
+        h = d.hour.astype(str)
+        self.dt_h = set(d.daytype + "|" + h)
+        self.g_dt = set(d.group + "|" + d.daytype)
+        self.g_dt_h = set(d.group + "|" + d.daytype + "|" + h)
+        self.t_max, self.kp_max = int(d.t.max()), int(d.koshu_prog.max())
+        koshu_t = set(d.t[d.koshu])
+        self.knots = [k for k in range(int(d.t.min()) + s["knot_days"], self.t_max - 7, s["knot_days"]) if k not in koshu_t]
+        self.names = list(self._cols(d.assign(daytype_fb=d.daytype)))
+        X, pen = self._X(d)
+        y = d.y.to_numpy(dtype=float)
+        w = 0.5 ** ((self.t_max - d.t.to_numpy(dtype=float)) / s["half_life"])
+        beta = np.zeros(X.shape[1])
+        for _ in range(100):   # IRLS
+            mu = np.exp(np.clip(X @ beta, -20, 8))
+            z = X @ beta + (y - mu) / mu
+            W = w * mu
+            new = np.linalg.solve(X.T @ (X * W[:, None]) + np.diag(pen), X.T @ (W * z))
+            done = np.max(np.abs(new - beta)) < 1e-9
+            beta = new
+            if done:
+                break
+        self.beta = beta
+        return self
+
+    def predict(self, d):
+        X, _ = self._X(d)
+        return np.exp(np.clip(X @ self.beta, -20, 8))
+
+
+def _ref_days(model, last_date):
+    """係数（倍率）を出すための基準日: データ最終日の水準の平日など"""
+    def day(daytype, dow, **kw):
+        base = dict(date=last_date, daytype=daytype, dow=dow, test_early=False, test_late=False,
+                    test_name="", koshu=False, koshu_prog=0, t=model.t_max)
+        base.update(kw)
+        rows = [(h, g) for h in OPEN_HOURS[daytype] for g in GROUPS]
+        return pd.DataFrame(rows, columns=["hour", "group"]).assign(**base)
+
+    def total(days):
+        out = {g: 0.0 for g in GROUPS + ["全体"]}
+        for d in days:
+            p = model.predict(d)
+            for g in GROUPS:
+                out[g] += p[(d.group == g).to_numpy()].sum()
+            out["全体"] += p.sum()
+        return {g: v / len(days) for g, v in out.items()}
+
+    base = total([day("平日", w) for w in range(5)])
+    cases = {
+        "テスト期間・前半（最初の2週間）": [day("平日", w, test_early=True, test_name="2学期中間") for w in range(5)],
+        "テスト期間・後半": [day("平日", w, test_late=True, test_name="2学期中間") for w in range(5)],
+        "講習・はじめ": [day("講習", w, koshu=True) for w in range(5)],
+        "講習・3週目": [day("講習", w, koshu=True, koshu_prog=14) for w in range(5)],
+        "土曜・祝日": [day("土曜祝日", 5)],
+    }
+    rows = []
+    for name, days in cases.items():
+        t = total(days)
+        rows.append({"期間": name, **{g: t[g] / base[g] for g in ["全体"] + GROUPS}})
+    return pd.DataFrame(rows).set_index("期間")
+
+
+@st.cache_data(ttl=600, show_spinner="混雑予測を計算しています…")
+def crowd_forecast(records, train_end, pred_start, pred_end, with_effects=True):
+    """train_end より前のデータで学習し、pred_start〜pred_end を予測する。
+    戻り値: (学年別の予測 DataFrame[date,hour,group,pred], 倍率の表, 学習の情報)。データ不足なら None"""
+    rec = records[(pd.to_datetime(records["日付"]) >= TRAIN_START) & (pd.to_datetime(records["日付"]) < train_end)]
+    if rec.empty:
+        return None
+    occ, rec_days = _occupancy(rec)
+    cal = crowd_calendar(TRAIN_START, pd.Timestamp(train_end) - timedelta(days=1))
+    cal = cal[cal.date.isin(rec_days)]
+    if (~cal.closed).sum() < 28:
+        return None
+    panel = _rows_for(cal).merge(occ, how="left").fillna({"occ": 0.0}).rename(columns={"occ": "y"})
+    model = CrowdModel(MODEL_SETTINGS).fit(panel)
+    fut = _rows_for(crowd_calendar(pred_start, pred_end))
+    fut["pred"] = model.predict(fut)
+    effects = _ref_days(model, panel.date.max()) if with_effects else None
+    info = dict(last_date=panel.date.max(), n_days=int(panel.date.nunique()))
+    return fut[["date", "hour", "group", "pred"]], effects, info
+
+
+def apply_kou3_scenario(fut, factor_exam, factor_after):
+    """高3・既卒の受験期・卒業後の倍率をかける"""
+    f = fut.copy()
+    md = f.date.dt.month * 100 + f.date.dt.day
+    k3 = f.group == "高3・既卒"
+    exam = md.between(KOU3_EXAM[0][0] * 100 + KOU3_EXAM[0][1], KOU3_EXAM[1][0] * 100 + KOU3_EXAM[1][1])
+    after = md.between(KOU3_AFTER[0][0] * 100 + KOU3_AFTER[0][1], KOU3_AFTER[1][0] * 100 + KOU3_AFTER[1][1])
+    f.loc[k3 & exam, "pred"] *= factor_exam
+    f.loc[k3 & after, "pred"] *= factor_after
+    return f
+
+
+def forecast_totals(fut, data_last_date):
+    """日付×時間の全体予測と80%の範囲"""
+    tot = fut.groupby(["date", "hour"], as_index=False).pred.sum()
+    ahead = (tot.date - pd.Timestamp(data_last_date)).dt.days
+    q10 = np.select([ahead <= b[0] for b in PRED_BANDS], [b[1] for b in PRED_BANDS])
+    q90 = np.select([ahead <= b[0] for b in PRED_BANDS], [b[2] for b in PRED_BANDS])
+    tot["lo"] = np.maximum(0, tot.pred + q10 * np.sqrt(tot.pred + 1))
+    tot["hi"] = tot.pred + q90 * np.sqrt(tot.pred + 1)
+    return tot
+
 
 st.set_page_config(page_title="TKG Study Room Analytics", page_icon="icon.png", layout="wide")
 img_b64 = ""
@@ -549,6 +816,16 @@ elif menu == "分析":
     st.markdown("<div class='main-title'>ANALYTICS DASHBOARD</div>", unsafe_allow_html=True)
     df_ana = load_data()
     jst_today = pd.Timestamp(jst_now.date())
+    fc_main, records_for_model = None, None
+    if not df_ana.empty:
+        records_for_model = df_ana[['日付', '学年', '入室時間', '退室時間']].copy()
+        _next_last = ((jst_today.replace(day=1) + timedelta(days=32)).replace(day=1) + timedelta(days=32)).replace(day=1) - timedelta(days=1)
+        try:
+            fc_main = crowd_forecast(records_for_model, str(jst_today.date()), str(jst_today.date()),
+                                     str(max(_next_last, jst_today + timedelta(days=62)).date()))
+        except Exception as e:
+            st.warning(f"混雑予測の計算でエラーが起きました（{e}）。予測以外の画面はそのまま使えます。")
+            fc_main = None
 
     if not df_ana.empty:
         # --- 月間利用トレンドグラフの追加 ---
@@ -617,49 +894,43 @@ elif menu == "分析":
             pct_avg_p = (diff_avg_p / avg_last_p * 100) if avg_last_p > 0 else (100 if avg_this_p > 0 else 0)
             col_met_p3.metric("1人あたり平均学習時間", f"{avg_this_p:.1f} 時間", f"{pct_avg_p:+.1f}% ({diff_avg_p:+.1f} 時間)")
 
-        # --- 翌月の利用予測 ---
+        # --- 翌月の利用予測（混雑予測モデル） ---
         today_d = jst_today.day
         next_month_first = (jst_today.replace(day=1) + timedelta(days=32)).replace(day=1)
+        next_month_last = (next_month_first + timedelta(days=32)).replace(day=1) - timedelta(days=1)
         days_in_month = (next_month_first - timedelta(days=1)).day
-        
-        proj_hours_this_month = hours_this_p / today_d * days_in_month if today_d > 0 else 0
-        
-        growth_rate_h = pct_hours_p / 100.0 if pct_hours_p != 100 else 0
-        next_month_h = proj_hours_this_month * (1 + max(min(growth_rate_h, 0.15), -0.15))
         next_month_u = users_this_p * (1 + max(min((pct_users_p / 100.0), 0.1), -0.1))
-        
+        if fc_main is not None:
+            fut_nm = fc_main[0][(fc_main[0]["date"] >= next_month_first) & (fc_main[0]["date"] <= next_month_last)]
+            next_month_h = fut_nm["pred"].sum()
+            h_note = "時間はテスト・講習期間と最近の伸びを反映した混雑予測モデルの値、人数は今月のペースからの見込みです。"
+        else:
+            proj_hours_this_month = hours_this_p / today_d * days_in_month if today_d > 0 else 0
+            growth_rate_h = pct_hours_p / 100.0 if pct_hours_p != 100 else 0
+            next_month_h = proj_hours_this_month * (1 + max(min(growth_rate_h, 0.15), -0.15))
+            h_note = "データが少ないため、今月のペースからの見込みです。"
+
         st.markdown(f"""
         <div style='background-color: #FFFFFF; border-left: 6px solid #F59E0B; padding: 20px; border-radius: 12px; margin-top: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.05);'>
-            <div style='font-weight: 900; color: #0F172A; margin-bottom: 8px; font-size: 1.2rem;'>翌月の着地予測</div>
+            <div style='font-weight: 900; color: #0F172A; margin-bottom: 8px; font-size: 1.2rem;'>翌月（{next_month_first.month}月）の着地予測</div>
             <div style='color: #475569; font-size: 1.05rem;'>
-                現在のペースと成長トレンドを考慮すると、来月は <b style='color: #B45309; font-size: 1.3rem;'>約 {next_month_h:.0f} 時間</b> の利用と、<b style='color: #B45309; font-size: 1.3rem;'>約 {int(next_month_u)} 名</b> の生徒の来室が見込まれます。
+                来月は <b style='color: #B45309; font-size: 1.3rem;'>約 {next_month_h:.0f} 時間</b> の利用と、<b style='color: #B45309; font-size: 1.3rem;'>約 {int(next_month_u)} 名</b> の生徒の来室が見込まれます。
             </div>
+            <div style='color: #94A3B8; font-size: 0.85rem; margin-top: 6px;'>{h_note}</div>
         </div>
         """, unsafe_allow_html=True)
-        
-        # --- 前月の予測に対するフィードバック（前々月時点での翌月の予測 と 先月の実際の結果の比較） ---
-        # 前々月の総学習時間を取得
-        hours_2mo = df_2mo_f['利用時間（時間）'].sum()
-        if hours_2mo > 0:
-            # 前々月の実績をもとに、先月時点（前々月末）で予測していた先月の予想値を再現するための計算
-            # （先月の前月比成長率pct_hours_lastを逆算、あるいは前々月から先月同日比較の成長率を模す）
-            # ここでは「前々月の実績 × (1 + 前々月と3ヶ月前の成長率、または直近のトレンド)」を簡便に再現するか、
-            # あるいは「前々月の実績」に単純に当時の成長率を適用した値と比較します。
-            # 安全のため、前々月の実績をベースにした前月予測値（近似）を算出します。
-            # ※より厳密には、前月時点の速報データからの予測値が必要です。ここでは、先月の確定実績(hours_last)と、
-            # 「前々月末時点での成長予測」を対比させます。
-            
-            # 前々月とさらにその前の月のデータから、前々月末に想定されていた成長率を推計
-            df_3mo_f = df_ana[(df_ana['日付'] >= (two_months_ago_start - pd.DateOffset(months=1))) & (df_ana['日付'] < two_months_ago_start)]
-            hours_3mo = df_3mo_f['利用時間（時間）'].sum()
-            prev_growth_rate = (hours_2mo - hours_3mo) / hours_3mo if hours_3mo > 0 else 0
-            
-            # 前々月末にシステムが予測していた「先月の予測値」
-            predicted_last_month_h = hours_2mo * (1 + max(min(prev_growth_rate, 0.15), -0.15))
-            
+
+        # --- 先月の予測の振り返り（前々月末までのデータで予測した先月 と 実績の比較） ---
+        try:
+            fc_prev = crowd_forecast(records_for_model, str(last_month_start.date()), str(last_month_start.date()),
+                                     str(last_month_end.date()), False)
+        except Exception:
+            fc_prev = None
+        if fc_prev is not None and hours_last > 0:
+            predicted_last_month_h = fc_prev[0]["pred"].sum()
             diff_pred_last = hours_last - predicted_last_month_h
             diff_pct_last = (diff_pred_last / predicted_last_month_h) * 100 if predicted_last_month_h > 0 else 0
-            
+
             if abs(diff_pct_last) <= 5:
                 eval_msg_last = "🎯 <b>非常に高い精度</b>で予測が的中しました（ほぼ予測通り）。"
             elif abs(diff_pct_last) <= 15:
@@ -668,13 +939,13 @@ elif menu == "分析":
                 eval_msg_last = "🚀 実際の利用が予測を<b>大きく上回る伸び</b>を見せました。"
             else:
                 eval_msg_last = "📉 実際の利用が予測を<b>下回る結果</b>となりました。"
-                
+
             st.markdown(f"""
             <div style='background-color: #F8FAFC; border-left: 6px solid #64748B; padding: 15px; border-radius: 8px; margin-top: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.02);'>
-                <div style='font-weight: 800; color: #475569; margin-bottom: 5px; font-size: 1.05rem;'>📊 先月の予測モデルの振り返り（前々月時点での翌月の予測 と 先月の実際の結果の比較）</div>
+                <div style='font-weight: 800; color: #475569; margin-bottom: 5px; font-size: 1.05rem;'>📊 先月の予測の振り返り</div>
                 <div style='color: #475569; font-size: 0.95rem; line-height: 1.6;'>
-                    前々月末の段階でシステムが予測していた先月（{last_month_start.month}月）の総学習時間予測は <b>約 {predicted_last_month_h:.0f} 時間</b> でした。<br>
-                    それに対する先月の実際の総学習時間（実績：<b>{hours_last:.1f} 時間</b>）との差は <b>{diff_pct_last:+.1f}%</b> であり、{eval_msg_last}
+                    前々月末までのデータで混雑予測モデルが出した先月（{last_month_start.month}月）の総学習時間の予測は <b>約 {predicted_last_month_h:.0f} 時間</b> でした。<br>
+                    実際の総学習時間（<b>{hours_last:.1f} 時間</b>）との差は <b>{diff_pct_last:+.1f}%</b> で、{eval_msg_last}
                 </div>
             </div>
             """, unsafe_allow_html=True)
@@ -683,7 +954,7 @@ elif menu == "分析":
         
     st.markdown("<hr style='margin: 30px 0;'>", unsafe_allow_html=True)
 
-    tab1, tab2, tab3 = st.tabs(["混雑状況", "生徒個別", "来週の予測"])
+    tab1, tab2, tab3 = st.tabs(["混雑状況", "生徒個別", "混雑予測"])
     def get_active_slots(in_str, out_str, slots_list):
         def parse_time(t_str):
             t_str = str(t_str).strip()
@@ -765,85 +1036,127 @@ elif menu == "分析":
         else: st.info("集計するデータがありません。")
 
     with tab3:
-        st.markdown("<div class='section-title'>来週の混雑予測（推計）</div>", unsafe_allow_html=True)
-        st.markdown("<p style='color:#64748B; font-size:1rem; font-weight: bold;'>過去の実績から「通常期間」と「講習期間」を自動判別し、来週の各時間帯に平均して何人の生徒が来るかを推計しています。</p>", unsafe_allow_html=True)
-        if not df_ana.empty:
-            test_mult, before_mult = learn_multipliers(df_ana)
-            target_dates = [jst_today + timedelta(days=i) for i in range(1, 8)]
-            has_test = any(get_period_status(dt) == "test" for dt in target_dates)
-            has_before = any(get_period_status(dt) == "before_test" for dt in target_dates)
-            
-            if has_test or has_before:
-                msg_parts = []
-                if has_test: msg_parts.append("「テスト期間」")
-                if has_before: msg_parts.append("「テスト1週間前」")
-                st.markdown(f"<div style='background-color: #FEF2F2; border-left: 5px solid #DC2626; padding: 15px; margin-bottom: 20px; border-radius: 8px;'><p style='color:#DC2626; font-weight:bold; margin:0;'>来週は{' または '.join(msg_parts)}に該当する日があるため、通常より混雑が予想されます。座席数を超える時間帯にご注意ください。</p></div>", unsafe_allow_html=True)
+        st.markdown("<div class='section-title'>混雑予測</div>", unsafe_allow_html=True)
+        st.markdown("<p style='color:#64748B; font-size:1rem; font-weight: bold;'>過去の利用データから、曜日・時間帯・学年ごとのパターンに、テスト期間・講習期間・生徒数の増減を掛け合わせて予測しています。数字は「その1時間に平均して何人いるか」です。</p>", unsafe_allow_html=True)
+        if fc_main is None:
+            st.info("予測には、6/4以降のデータが4週間分以上必要です。")
+        else:
+            fut_all, effects, fc_info = fc_main
+            col_s1, col_s2, col_s3 = st.columns([1, 1, 2])
+            with col_s1: seats = int(st.number_input("座席数", min_value=1, max_value=200, value=SEATS_DEFAULT, step=1))
+            with col_s2: week_sel = st.selectbox("表示する期間", ["この先7日", "8〜14日後"])
+            with col_s3: scen_sel = st.selectbox("1月中旬以降の高3（受験期）の見通し", list(KOU3_SCENARIOS.keys()))
+            fut_s = apply_kou3_scenario(fut_all, *KOU3_SCENARIOS[scen_sel])
+            tot = forecast_totals(fut_s, fc_info["last_date"])
+            tot_idx = tot.set_index(["date", "hour"])
 
-            pred_time_slots = get_time_slots_for_period((jst_today + pd.Timedelta(days=7)).strftime('%Y年%m月'))
-            weekdays = ["月", "火", "水", "木", "金", "土", "日"]
-            predict_data = pd.DataFrame(0.0, index=weekdays, columns=pred_time_slots)
+            view_start = jst_today + timedelta(days=0 if week_sel == "この先7日" else 7)
+            cal7 = crowd_calendar(view_start, view_start + timedelta(days=6))
 
-            temp_df = df_ana.copy()
-            temp_df['dt'] = pd.to_datetime(temp_df['日付']).dt.date
-            
-            for dt in target_dates:
-                wd = weekdays[dt.weekday()]
-                is_special = is_special_period(dt)
-                status = get_period_status(dt)
-                
-                past_df = temp_df[temp_df['dt'] < dt.date()]
-                matching_dates = []
-                # まず同じ「期間属性（通常or講習）」の同じ曜日を探す
-                for past_d in sorted(past_df['dt'].unique(), reverse=True):
-                    if past_d.weekday() == dt.weekday() and is_special_period(past_d) == is_special:
-                        matching_dates.append(past_d)
-                        if len(matching_dates) >= 4: break
-                
-                # 見つからなければ（初期など）、属性を無視して直近の同じ曜日を拾う
-                if not matching_dates:
-                    for past_d in sorted(past_df['dt'].unique(), reverse=True):
-                        if past_d.weekday() == dt.weekday():
-                            matching_dates.append(past_d)
-                            if len(matching_dates) >= 4: break
-                
-                if not matching_dates: continue
-                
-                sample_df = past_df[past_df['dt'].isin(matching_dates)]
-                weight = 1.0 / len(matching_dates)
-                mult = test_mult if status == "test" else (before_mult if status == "before_test" else 1.0)
-                
-                for _, row in sample_df.iterrows():
-                    if not row['入室時間'] or not row['退室時間']: continue
-                    try:
-                        for slot in get_active_slots(row['入室時間'], row['退室時間'], pred_time_slots): 
-                            if slot in predict_data.columns:
-                                predict_data.loc[wd, slot] += weight * mult
-                    except: continue
+            # --- 期間のお知らせ（テスト・講習） ---
+            def day_note(r):
+                if r.closed: return ""
+                if r.test_early: return f"{r.test_name}テストの前半（混みやすい時期）"
+                if r.test_late: return f"{r.test_name}テストの後半（空きやすい時期）"
+                if r.koshu: return "講習期間（朝から利用が増えます）"
+                return ""
+            notes, run = [], None
+            for r in cal7.itertuples():
+                lab = day_note(r)
+                if run and run[2] == lab: run[1] = r.date
+                else:
+                    if run and run[2]: notes.append(run)
+                    run = [r.date, r.date, lab]
+            if run and run[2]: notes.append(run)
+            if notes:
+                lines = "<br>".join(f"{a.month}/{a.day}" + (f"〜{b.month}/{b.day}" if b != a else "") + f"：{lab}" for a, b, lab in notes)
+                st.markdown(f"<div style='background-color: #FEF2F2; border-left: 5px solid #DC2626; padding: 15px; margin-bottom: 20px; border-radius: 8px;'><p style='color:#DC2626; font-weight:bold; margin:0; line-height:1.7;'>{lines}</p></div>", unsafe_allow_html=True)
 
-            html = "<div style='overflow-x: auto; background: white; padding: 15px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); border: 1px solid #E2E8F0;'><table style='width:100%; border-collapse: collapse; min-width: 600px;'>"
-            html += "<tr><th style='border: 1px solid #CBD5E1; padding: 10px; background-color: #F8FAFC; color: #0F172A; position: sticky; left: 0; z-index: 1;'>曜日</th>"
-            for tb in pred_time_slots: html += f"<th style='border: 1px solid #CBD5E1; padding: 10px; background-color: #F8FAFC; color: #0F172A; font-size:0.85rem;'>{tb[:2]}時台</th>"
+            # --- 日付×時間帯の表 ---
+            show_hours = list(range(9, 22)) if cal7.daytype.isin(["講習", "講習日曜"]).any() else list(range(12, 22))
+            th = "border: 1px solid #CBD5E1; padding: 10px; background-color: #F8FAFC; color: #0F172A;"
+            html = "<div style='overflow-x: auto; background: white; padding: 15px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); border: 1px solid #E2E8F0;'><table style='width:100%; border-collapse: collapse; min-width: 640px;'>"
+            html += f"<tr><th style='{th} position: sticky; left: 0; z-index: 1;'>日付</th>"
+            for h in show_hours: html += f"<th style='{th} font-size:0.85rem;'>{h}時台</th>"
             html += "</tr>"
-
-            for wd in weekdays:
-                html += f"<tr><th style='border: 1px solid #CBD5E1; padding: 10px; background-color: #F8FAFC; color: #0F172A; position: sticky; left: 0; z-index: 1;'>{wd}</th>"
-                for tb in pred_time_slots:
-                    val = predict_data.loc[wd, tb]
-                    ratio = min(val / 20.0, 1.0)
-                    rounded_val = int(round(val))
-                    if rounded_val >= 20: bg_color, font_color, display_val = "rgba(220, 38, 38, 0.9)", "white", "満席"
-                    elif rounded_val >= 15: bg_color, font_color, display_val = f"rgba(234, 88, 12, {max(0.6, ratio)})", "white", f"約{rounded_val}人"
-                    elif rounded_val > 0: bg_color, font_color, display_val = f"rgba(37, 99, 235, {ratio * 0.8})", ("white" if ratio > 0.4 else "#1E293B"), f"約{rounded_val}人"
-                    else: bg_color, font_color, display_val = "transparent", "#1E293B", "-"
-                    html += f"<td style='border: 1px solid #CBD5E1; padding: 10px; text-align: center; font-size:0.85rem; font-weight: bold; background-color: {bg_color}; color: {font_color};'>{display_val}</td>"
+            for r in cal7.itertuples():
+                tags = ""
+                if (r.test_early or r.test_late) and not r.closed: tags += "<span style='display:inline-block; margin-left:6px; padding:1px 6px; border-radius:999px; border:1px solid #DC2626; color:#DC2626; font-size:0.7rem;'>テスト</span>"
+                if r.koshu and not r.closed: tags += "<span style='display:inline-block; margin-left:6px; padding:1px 6px; border-radius:999px; border:1px solid #D97706; color:#B45309; font-size:0.7rem;'>講習</span>"
+                label = f"{r.date.month}/{r.date.day}({WEEKDAYS_JA[r.dow]}{'・祝' if r.holiday else ''})"
+                html += f"<tr><th style='{th} position: sticky; left: 0; z-index: 1; white-space: nowrap; text-align:left;'>{label}{tags}</th>"
+                if r.closed:
+                    html += f"<td colspan='{len(show_hours)}' style='border: 1px solid #CBD5E1; padding: 10px; text-align: center; color: #94A3B8; font-weight: bold;'>休館（{r.closed_reason}）</td></tr>"
+                    continue
+                for h in show_hours:
+                    if (r.date, h) not in tot_idx.index:
+                        html += "<td style='border: 1px solid #CBD5E1; padding: 10px; text-align: center; color: #CBD5E1;'>-</td>"
+                        continue
+                    row = tot_idx.loc[(r.date, h)]
+                    val, n = row["pred"], int(round(row["pred"]))
+                    tip = f"80%の範囲 {row['lo']:.0f}〜{row['hi']:.0f}人"
+                    if val >= seats: bg, fg, disp = "rgba(220, 38, 38, 0.9)", "white", f"満席 約{n}人"
+                    elif val >= seats - 3: bg, fg, disp = "rgba(234, 88, 12, 0.8)", "white", f"約{n}人"
+                    elif n > 0:
+                        ratio = min(val / seats, 1.0)
+                        bg, fg, disp = f"rgba(37, 99, 235, {ratio * 0.8:.2f})", ("white" if ratio > 0.45 else "#1E293B"), f"約{n}人"
+                    else: bg, fg, disp = "transparent", "#94A3B8", "-"
+                    html += f"<td title='{tip}' style='border: 1px solid #CBD5E1; padding: 10px; text-align: center; font-size:0.85rem; font-weight: bold; background-color: {bg}; color: {fg};'>{disp}</td>"
                 html += "</tr>"
             html += "</table></div>"
-            
-            if predict_data.sum().sum() > 0:
-                st.markdown(html, unsafe_allow_html=True)
-            else:
-                st.info("過去の類似データが不足しているため、予測を計算できませんでした。")
-        else: st.info("集計するデータがありません。")
+            st.markdown(html, unsafe_allow_html=True)
+            st.markdown(f"<p style='color:#64748B; font-size:0.85rem; margin-top:6px;'>赤＝座席数（{seats}席）以上、オレンジ＝残り3席以内。マスにカーソルを合わせると80%の範囲が出ます。</p>", unsafe_allow_html=True)
+
+            # --- この先8週間の見通し ---
+            st.markdown("<div class='section-title'>この先8週間の見通し</div>", unsafe_allow_html=True)
+            horizon_end = jst_today + timedelta(days=55)
+            t8 = tot[(tot.date >= jst_today) & (tot.date <= horizon_end)]
+            if not t8.empty:
+                pk = t8.loc[t8.groupby("date").pred.idxmax()].copy()
+                pk["日付"] = pk.date.dt.strftime("%m/%d") + "(" + pk.date.dt.dayofweek.map(lambda i: WEEKDAYS_JA[i]) + ")"
+                pk["ピーク"] = pk.hour.astype(str) + "時台 約" + pk.pred.round().astype(int).astype(str) + "人"
+                cal8 = crowd_calendar(jst_today, horizon_end)
+                spans, cur = [], None
+                for r in cal8.itertuples():
+                    kind = "テスト期間" if (r.test_early or r.test_late) else ("講習期間" if r.koshu else None)
+                    if cur and cur[2] == kind: cur[1] = r.date + timedelta(days=1)
+                    else:
+                        if cur and cur[2]: spans.append(cur)
+                        cur = [r.date, r.date + timedelta(days=1), kind]
+                if cur and cur[2]: spans.append(cur)
+                try:
+                    import altair as alt
+                    x = alt.X("date:T", title=None, axis=alt.Axis(format="%m/%d"))
+                    layers = []
+                    if spans:
+                        sp = pd.DataFrame(spans, columns=["start", "end", "期間"])
+                        layers.append(alt.Chart(sp).mark_rect(opacity=0.12).encode(
+                            x=alt.X("start:T", title=None), x2="end:T",
+                            color=alt.Color("期間:N", scale=alt.Scale(domain=["テスト期間", "講習期間"], range=["#DC2626", "#F59E0B"]),
+                                            legend=alt.Legend(title=None, orient="top"))))
+                    base = alt.Chart(pk).encode(x=x)
+                    layers.append(base.mark_area(opacity=0.18, color="#005BAB").encode(y=alt.Y("lo:Q", title="その日のピーク（人）"), y2="hi:Q"))
+                    layers.append(base.mark_line(point=True, color="#0A2B56").encode(
+                        y="pred:Q", tooltip=[alt.Tooltip("日付:N"), alt.Tooltip("ピーク:N"),
+                                             alt.Tooltip("lo:Q", title="80%の範囲 下", format=".0f"), alt.Tooltip("hi:Q", title="80%の範囲 上", format=".0f")]))
+                    layers.append(alt.Chart(pd.DataFrame({"y": [seats]})).mark_rule(color="#DC2626", strokeDash=[4, 4]).encode(y="y:Q"))
+                    st.altair_chart(alt.layer(*layers).properties(height=280), use_container_width=True)
+                except Exception:
+                    st.line_chart(pk.set_index("date")[["pred", "lo", "hi"]])
+                st.markdown("<p style='color:#64748B; font-size:0.85rem;'>各日でいちばん混む時間帯の予測人数。帯は80%の範囲、点線は座席数。4週間より先は目安です。</p>", unsafe_allow_html=True)
+
+            with st.expander("期間ごとの係数（データから推定した倍率）"):
+                if effects is not None:
+                    st.markdown("同じ時期のふつうの平日（月〜金）を1としたときの、1日の延べ在室時間の倍率です。データが増えると自動で推定し直されます。")
+                    st.dataframe(effects.apply(lambda col: col.map(lambda v: f"×{v:.2f}")), use_container_width=True)
+            with st.expander("予測の仕組みと精度"):
+                st.markdown(f"""
+- 学習に使っているのは {TRAIN_START} 以降の記録です（それより前は試用期間）。最新は {fc_info['last_date']:%m/%d} までの {fc_info['n_days']} 日分。
+- 学年グループ（小学生・中学生・高1/高2・高3/既卒）ごとに、曜日タイプ×時間帯のパターン、生徒数のトレンド、テスト期間（前半2週間・後半）、講習期間中の盛り上がりを掛け合わせたポアソン回帰です。直近6週間のデータを重めに見ています。
+- 2026年10月の答え合わせ（8/1〜10/3の各週末までのデータで2週間先までを予測）では、時間帯ごとの誤差が平均2.5人（以前の方式は3.3人）、その日のピーク人数の誤差が平均3.1人（以前は5.1人）でした。
+- 満席の見張りには、オレンジ（残り3席以内）を目安にすると、実際に満席になった枠の約4分の3を事前に拾えます。
+- 講習・テスト・休館の日付は、コードの「期間の設定」で変えられます。1月中旬以降の高3はデータがないので、上の見通しで切り替えてください。
+""")
 
 elif menu == "管理":
     st.markdown("<div class='main-title'>ADMIN PANEL</div>", unsafe_allow_html=True)
